@@ -51,6 +51,19 @@ index afd4517..fc881cd 100644
 +vendor.egistec.hardware.fingerprint::IBiometricsFingerprintEts u:object_r:hal_fingerprint_hwservice:s0
 +com.motorola.hardware.biometric.fingerprint::IMotoFingerPrint u:object_r:hal_fingerprint_hwservice:s0
 +com.motorola.hardware.biometric.fingerprint::IMotoFingerPrintSensorTest u:object_r:hal_fingerprint_hwservice:s0
+diff --git a/sepolicy/vendor_qcom/hal_usb_impl.te b/sepolicy/vendor_qcom/hal_usb_impl.te
+index 49a23af..3689b0b 100644
+--- a/sepolicy/vendor_qcom/hal_usb_impl.te
++++ b/sepolicy/vendor_qcom/hal_usb_impl.te
+@@ -3,7 +3,7 @@ r_dir_file(hal_usb_impl, vendor_sysfs_battery_supply)
+ allow hal_usb_impl vendor_sysfs_battery_supply:file w_file_perms; 
+ 
+ set_prop(hal_usb_impl, vendor_usb_prop)
+-r_dir_file(hal_usb_impl, vendor_sysfs_usb_c)
++r_dir_file(hal_usb_impl, sysfs_typec)
+ 
+ r_dir_file(hal_usb_impl, vendor_sysfs_usb_supply)
+ allow hal_usb_impl vendor_sysfs_usb_supply:file w_file_perms;
 diff --git a/vintf/manifest-qcom.xml b/vintf/manifest-qcom.xml
 index fbb2b3c..6dc01b1 100644
 --- a/vintf/manifest-qcom.xml
