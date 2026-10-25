@@ -1,13 +1,12 @@
 diff --git a/bpf/loader/NetBpfLoad.cpp b/bpf/loader/NetBpfLoad.cpp
-index 238864798b..af0a4af8ca 100644
+index 7ba3247dcc..c20788a371 100644
 --- a/bpf/loader/NetBpfLoad.cpp
 +++ b/bpf/loader/NetBpfLoad.cpp
-@@ -1606,29 +1606,30 @@ static int doLoad(char** argv, char * const envp[]) {
+@@ -1548,42 +1548,40 @@ static int doLoad(char** argv, char * const envp[]) {
  
      // both S and T require kernel 4.9 (and eBpf support)
      // (this also guarantees 'kernelVer' isn't an invalid uninitialized 0)
-+    // doha (amogus_doha): relaxed to non-fatal, matching the already-non-fatal
-+    // 25Q4/5.10 gate below.
++    // doha (amogus_doha): the kernel version gates are relaxed to non-fatal.
 +    // Carried-forward Motorola 4.14 kernel trips the 4.19 gate below and
 +    // reboot_on_failure in netbpfload.rc turned that into an unconditional
 +    // bootloop; same precedent as LineageOS's own abandoned Gerrit 433516.
@@ -41,30 +40,45 @@ index 238864798b..af0a4af8ca 100644
      }
  
      // 25Q4 bumps the kernel requirement up to 5.10
+     // see also: //system/netd/tests/kernel_test.cpp TestKernel510
+     if (isAtLeast25Q4 && !isAtLeastKernelVersion(5, 10)) {
+-        ALOGE("Android 25Q4 requires kernel 5.10.");
+-        return 7;
++        ALOGW("Android 25Q4 requires kernel 5.10.");
+     }
+ 
+     // 26Q4 bumps the kernel requirement up to 5.15
+     if (isAtLeast26Q4 && !isAtLeastKernelVersion(5, 15)) {
+-        ALOGE("Android 26Q4 requires kernel 5.15.");
+-        return 7;
++        ALOGW("Android 26Q4 requires kernel 5.15.");
+     }
+ 
+     // Technically already required by U, but only enforce on V+
 diff --git a/bpf/netd/BpfHandler.cpp b/bpf/netd/BpfHandler.cpp
-index 7367ec5e97..3884290fa3 100644
+index 9b57548b54..2535e00d62 100644
 --- a/bpf/netd/BpfHandler.cpp
 +++ b/bpf/netd/BpfHandler.cpp
-@@ -98,12 +98,12 @@ static Status initPrograms(const char* cg2_path) {
+@@ -131,12 +131,12 @@ static Result<void> initPrograms(const char* cg2_path) {
  
      // V bumps the kernel requirement up to 4.19
      if (isAtLeastV && !isAtLeastKernelVersion(4, 19)) {
--        return Status("V+ platform with kernel version < 4.19.0 is unsupported");
+-        return Error() << "V+ platform with kernel version < 4.19.0 is unsupported";
 +        ALOGW("V+ platform with kernel version < 4.19.0 is unsupported");
      }
  
      // 25Q2 bumps the kernel requirement up to 5.4
      if (isAtLeast25Q2 && !isAtLeastKernelVersion(5, 4)) {
--        return Status("25Q2+ platform with kernel version < 5.4.0 is unsupported");
+-        return Error() << "25Q2+ platform with kernel version < 5.4.0 is unsupported";
 +        ALOGW("25Q2+ platform with kernel version < 5.4.0 is unsupported");
      }
  
      unique_fd cg_fd(open(cg2_path, O_DIRECTORY | O_RDONLY | O_CLOEXEC));
 diff --git a/service/src/com/android/server/BpfNetMaps.java b/service/src/com/android/server/BpfNetMaps.java
-index a96819380c..3f5a42d72e 100644
+index c1a47997af..5d82237398 100644
 --- a/service/src/com/android/server/BpfNetMaps.java
 +++ b/service/src/com/android/server/BpfNetMaps.java
-@@ -284,7 +284,9 @@ public class BpfNetMaps {
+@@ -527,7 +527,9 @@ public class BpfNetMaps {
              return SingleWriterBpfMap.getSingleton(LOCAL_NET_BLOCKED_UID_MAP_PATH,
                      U32.class, Bool.class);
          } catch (ErrnoException e) {
@@ -75,7 +89,18 @@ index a96819380c..3f5a42d72e 100644
          }
      }
  
-@@ -294,7 +296,9 @@ public class BpfNetMaps {
+@@ -537,7 +539,9 @@ public class BpfNetMaps {
+             return SingleWriterBpfMap.getSingleton(LOCAL_NET_UID_HOST_ALLOWLIST_MAP_PATH,
+                     LocalNetUidHostAllowlistKey.class, Bool.class);
+         } catch (ErrnoException e) {
+-            throw new IllegalStateException("Cannot open local_net_uid_host_access map", e);
++            Log.e(TAG, "Cannot open local_net_uid_host_allowlist map, "
++                    + "local network host allowlist unsupported on this kernel", e);
++            return null;
+         }
+     }
+ 
+@@ -603,7 +607,9 @@ public class BpfNetMaps {
              return SingleWriterBpfMap.getSingleton(LOCAL_NET_ACCESS_MAP_PATH,
                      LocalNetAccessKey.class, Bool.class);
          } catch (ErrnoException e) {
@@ -86,16 +111,16 @@ index a96819380c..3f5a42d72e 100644
          }
      }
  
-@@ -356,7 +360,7 @@ public class BpfNetMaps {
-                 sLocalNetAccessMap = getLocalNetAccessMap();
-             }
-             try {
--                sLocalNetAccessMap.clear();
-+                if (sLocalNetAccessMap != null) sLocalNetAccessMap.clear();
-             } catch (ErrnoException e) {
-                 throw new IllegalStateException("Failed to initialize local_net_access map", e);
-             }
-@@ -365,7 +369,7 @@ public class BpfNetMaps {
+@@ -674,7 +680,7 @@ public class BpfNetMaps {
+                     sLocalNetAccessMap = getLocalNetAccessMap();
+                 }
+                 try {
+-                    sLocalNetAccessMap.clear();
++                    if (sLocalNetAccessMap != null) sLocalNetAccessMap.clear();
+                 } catch (ErrnoException e) {
+                     throw new IllegalStateException("Failed to initialize local_net_access map", e);
+                 }
+@@ -684,7 +690,7 @@ public class BpfNetMaps {
                  sLocalNetBlockedUidMap = getLocalNetBlockedUidMap();
              }
              try {
@@ -104,19 +129,16 @@ index a96819380c..3f5a42d72e 100644
              } catch (ErrnoException e) {
                  throw new IllegalStateException("Failed to initialize local_net_blocked_uid map",
                          e);
-@@ -932,6 +936,11 @@ public class BpfNetMaps {
-         final LocalNetAccessKey localNetAccessKey = new LocalNetAccessKey(lpmBitlen, ifIndex,
-                 address, protocol, remotePort);
- 
-+        if (sLocalNetAccessMap == null) {
-+            Log.e(TAG, "local_net_access map unsupported, skip addLocalNetAccess for "
-+                    + localNetAccessKey);
-+            return;
-+        }
-         try {
-             sLocalNetAccessMap.updateEntry(localNetAccessKey, new Bool(isAllowed));
-         } catch (ErrnoException e) {
-@@ -966,6 +975,11 @@ public class BpfNetMaps {
+@@ -695,7 +701,7 @@ public class BpfNetMaps {
+                     sLocalNetUidHostAllowlistMap = getLocalNetUidHostAllowlistMap();
+                 }
+                 try {
+-                    sLocalNetUidHostAllowlistMap.clear();
++                    if (sLocalNetUidHostAllowlistMap != null) sLocalNetUidHostAllowlistMap.clear();
+                 } catch (ErrnoException e) {
+                     throw new IllegalStateException(
+                             "Failed to initialize local_net_uid_host_allowlist map", e);
+@@ -1812,6 +1818,11 @@ public class BpfNetMaps {
          final LocalNetAccessKey localNetAccessKey = new LocalNetAccessKey(lpmBitlen, ifIndex,
                  address, protocol, remotePort);
  
@@ -125,10 +147,10 @@ index a96819380c..3f5a42d72e 100644
 +                    + localNetAccessKey);
 +            return;
 +        }
-         try {
-             sLocalNetAccessMap.deleteEntry(localNetAccessKey);
-         } catch (ErrnoException e) {
-@@ -1001,6 +1015,9 @@ public class BpfNetMaps {
+         synchronized (sLocalNetAccessLock) {
+             incrementLnpGenerationId(true);
+             try {
+@@ -1851,6 +1862,9 @@ public class BpfNetMaps {
          }
          final LocalNetAccessKey localNetAccessKey = new LocalNetAccessKey(lpmBitlen, ifIndex,
                  address, protocol, remotePort);
@@ -136,9 +158,9 @@ index a96819380c..3f5a42d72e 100644
 +            return true;
 +        }
          try {
-             final Bool value = sLocalNetAccessMap.getValue(localNetAccessKey);
-             return value == null ? true : value.val;
-@@ -1018,6 +1035,11 @@ public class BpfNetMaps {
+             Bool value;
+             synchronized (sLocalNetAccessLock) {
+@@ -1902,6 +1916,11 @@ public class BpfNetMaps {
      @RequiresApi(Build.VERSION_CODES.CUR_DEVELOPMENT)
      public void addUidToLocalNetBlockMap(final int uid) {
          throwIfPre25Q2("addUidToLocalNetBlockMap is not available on pre-B devices");
@@ -150,7 +172,7 @@ index a96819380c..3f5a42d72e 100644
          try {
              sLocalNetBlockedUidMap.updateEntry(new U32(uid), new Bool(true));
          } catch (ErrnoException e) {
-@@ -1032,6 +1054,9 @@ public class BpfNetMaps {
+@@ -1916,6 +1935,9 @@ public class BpfNetMaps {
      @RequiresApi(Build.VERSION_CODES.CUR_DEVELOPMENT)
      public boolean isUidBlockedFromUsingLocalNetwork(final int uid) {
          throwIfPre25Q2("isUidBlockedFromUsingLocalNetwork is not available on pre-B devices");
@@ -160,7 +182,7 @@ index a96819380c..3f5a42d72e 100644
          try {
              final Bool value = sLocalNetBlockedUidMap.getValue(new U32(uid));
              return value == null ? false : value.val;
-@@ -1049,6 +1074,11 @@ public class BpfNetMaps {
+@@ -1933,6 +1955,11 @@ public class BpfNetMaps {
      @RequiresApi(Build.VERSION_CODES.CUR_DEVELOPMENT)
      public void removeUidFromLocalNetBlockMap(final int uid) {
          throwIfPre25Q2("removeUidFromLocalNetBlockMap is not available on pre-B devices");
@@ -171,4 +193,43 @@ index a96819380c..3f5a42d72e 100644
 +        }
          try {
              sLocalNetBlockedUidMap.deleteEntry(new U32(uid));
+         } catch (ErrnoException e) {
+@@ -1975,6 +2002,7 @@ public class BpfNetMaps {
+         }
+ 
+         final LocalNetUidHostAllowlistKey key = new LocalNetUidHostAllowlistKey(uid, ifIndex);
++        if (sLocalNetUidHostAllowlistMap == null) return;
+         try {
+             synchronized (sLocalNetAccessLock) {
+                 incrementLnpGenerationId(true);
+@@ -2009,6 +2037,7 @@ public class BpfNetMaps {
+     @RequiresApi(Build.VERSION_CODES.BAKLAVA)
+     public void removeLocalNetHostAllowlistForInterface(final int ifIndex) {
+         throwIfPre25Q2("removeLocalNetHostAllowlistForInterface is not available on pre-B devices");
++        if (sLocalNetUidHostAllowlistMap == null) return;
+         synchronized (sLocalNetAccessLock) {
+             incrementLnpGenerationId(true);
+             try {
+@@ -2339,6 +2368,10 @@ public class BpfNetMaps {
+     private void updateLocalNetAccessMap(final LocalNetAccessKey key, final boolean isAllowed) {
+         int eventType =
+                 CORE_NETWORKING_CRITICAL_COUNTS_EVENT_OCCURRED__EVENT_TYPE__CRITICAL_COUNTS_EVENT_TYPE_LNP_TRIE_NET_OK;
++        if (sLocalNetAccessMap == null) {
++            Log.e(TAG, "local_net_access map unsupported, skip update for " + key);
++            return;
++        }
+         try {
+             sLocalNetAccessMap.updateEntry(key, new Bool(isAllowed));
+         } catch (ErrnoException e) {
+@@ -2360,6 +2393,11 @@ public class BpfNetMaps {
+             final boolean isAllowed) {
+         int eventType =
+                 CORE_NETWORKING_CRITICAL_COUNTS_EVENT_OCCURRED__EVENT_TYPE__CRITICAL_COUNTS_EVENT_TYPE_LNP_TRIE_HOST_OK;
++        if (sLocalNetUidHostAllowlistMap == null) {
++            Log.e(TAG, "local_net_uid_host_allowlist map unsupported, skip update for uid "
++                    + key.uid);
++            return;
++        }
+         try {
+             sLocalNetUidHostAllowlistMap.updateEntry(key, new Bool(isAllowed));
          } catch (ErrnoException e) {
