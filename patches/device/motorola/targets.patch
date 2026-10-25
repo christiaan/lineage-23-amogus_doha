@@ -1,8 +1,23 @@
 diff --git a/include/kernel/source.mk b/include/kernel/source.mk
-index 41e309b..315295b 100644
+index 41e309b..b4a9e82 100644
 --- a/include/kernel/source.mk
 +++ b/include/kernel/source.mk
-@@ -40,3 +40,30 @@ else ifeq ($(PRODUCT_USES_MTK_HARDWARE),true)
+@@ -26,6 +26,14 @@ else
+   TARGET_KERNEL_LLVM_BINUTILS := false
+ endif
+ TARGET_KERNEL_NO_GCC ?= false
++# LineageOS 24.0 builds every kernel with LLVM=1 LLVM_IAS=1 and no
++# CROSS_COMPILE, as there are no GNU binutils in the tree any more. Kernels
++# older than 5.4 only pass clang its --target when CROSS_COMPILE is set, so
++# without it they compile for the host. Only the prefix is used: with LLVM=1
++# every tool is the LLVM one.
++ifneq ($(call is-kernel-greater-than-or-equal-to,5.4),true)
++  TARGET_KERNEL_ADDITIONAL_FLAGS += CROSS_COMPILE=aarch64-linux-gnu-
++endif
+ TARGET_KERNEL_CONFIG := vendor/$(DEVICE)_defconfig
+ ifeq ($(TARGET_USES_DTB_FROM_SOURCE),false)
+   BOARD_PREBUILT_DTBIMAGE_DIR := device/motorola/$(DEVICE)-kernel/dtbs
+@@ -40,3 +48,30 @@ else ifeq ($(PRODUCT_USES_MTK_HARDWARE),true)
  else
    $(warning Target's hardware is not supported...)
  endif
