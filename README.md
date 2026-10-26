@@ -43,7 +43,10 @@ several years of upstream security and stability fixes. `uname -r` shows
   `build.sh` patches, and move out folders that no project in
   `default.xml` covers (`repo list -p` lists the projects). Our first
   build from a copied tree picked up another device's LatinIME change
-  this way.
+  this way. A plain checkout that no device has touched avoids that: we
+  keep one in `~/android/base/lineage-23.2` (`repo init -u
+  https://github.com/LineageOS/android.git -b lineage-23.2`, then `repo
+  sync`) and copy it for each new tree.
 - **32 GB RAM plus at least 32 GB swap.** Soong's analysis step peaks around
   20 GB. With 28 GB RAM and 8 GB swap it was OOM-killed.
 - A fast internet connection. The first sync downloads about 100 GB of
@@ -55,19 +58,19 @@ several years of upstream security and stability fixes. `uname -r` shows
 
 ```sh
 git clone http://192.168.1.18:3000/claude/lineage-23.2-amogus_doha.git doha-lineage
-mkdir -p ~/doha/src ~/doha/ccache ~/doha/zips
+mkdir -p ~/android/doha-23.2 ~/android/ccache/doha ~/doha/zips
 
 docker run --rm -it \
   --user "$(id -u):$(id -g)" -e HOME=/tmp \
   -v "$PWD/doha-lineage:/manifest:ro" \
-  -v ~/doha/src:/src \
-  -v ~/doha/ccache:/ccache -e CCACHE_DIR=/ccache \
+  -v ~/android/doha-23.2:/src \
+  -v ~/android/ccache/doha:/ccache -e CCACHE_DIR=/ccache \
   -v ~/doha/zips:/zips -e ZIP_DIR=/zips \
   --entrypoint /manifest/build.sh \
   lineageos4microg/docker-lineage-cicd:latest /src
 ```
 
-Without Docker, run `./build.sh ~/doha/src` from the clone.
+Without Docker, run `./build.sh ~/android/doha-23.2` from the clone.
 
 `build.sh` does the following:
 
