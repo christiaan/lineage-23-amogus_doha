@@ -11,10 +11,10 @@ index 709a1f6cf8c9..8402cf4b3554 100644
  
  /**
 diff --git a/kernel/sched/core.c b/kernel/sched/core.c
-index 63090ccdb0c9..4f0c393c01aa 100644
+index 51ce59fec545..270161f592b9 100644
 --- a/kernel/sched/core.c
 +++ b/kernel/sched/core.c
-@@ -7152,8 +7152,15 @@ static int __sched_updown_migrate_handler(struct ctl_table *table, int write,
+@@ -7153,8 +7153,15 @@ static int __sched_updown_migrate_handler(struct ctl_table *table, int write,
  	}
  
  	// Restrict boot process writes on boot time (120s)
@@ -32,10 +32,10 @@ index 63090ccdb0c9..4f0c393c01aa 100644
  	/*
  	 * Cache the old values so that they can be restored
 diff --git a/net/wireless/nl80211.c b/net/wireless/nl80211.c
-index 3a3b7cd9d9fb..973e163811d5 100644
+index bdddc2ec3311..ee6263bf79fd 100644
 --- a/net/wireless/nl80211.c
 +++ b/net/wireless/nl80211.c
-@@ -8235,7 +8235,8 @@ static int nl80211_dump_survey(struct sk_buff *skb, struct netlink_callback *cb)
+@@ -8238,7 +8238,8 @@ static int nl80211_dump_survey(struct sk_buff *skb, struct netlink_callback *cb)
  static bool nl80211_valid_wpa_versions(u32 wpa_versions)
  {
  	return !(wpa_versions & ~(NL80211_WPA_VERSION_1 |
@@ -45,3 +45,47 @@ index 3a3b7cd9d9fb..973e163811d5 100644
  }
  
  static int nl80211_authenticate(struct sk_buff *skb, struct genl_info *info)
+diff --git a/scripts/extract-cert.c b/scripts/extract-cert.c
+index dd1a4bd706a2..1f5bacf6ee7b 100644
+--- a/scripts/extract-cert.c
++++ b/scripts/extract-cert.c
+@@ -119,6 +119,9 @@ int main(int argc, char **argv)
+ 		fclose(f);
+ 		exit(0);
+ 	} else if (!strncmp(cert_src, "pkcs11:", 7)) {
++#ifdef OPENSSL_NO_ENGINE
++		ERR(1, "PKCS#11 needs the OpenSSL ENGINE API");
++#else
+ 		ENGINE *e;
+ 		struct {
+ 			const char *cert_id;
+@@ -141,6 +144,7 @@ int main(int argc, char **argv)
+ 		ENGINE_ctrl_cmd(e, "LOAD_CERT_CTRL", 0, &parms, NULL, 1);
+ 		ERR(!parms.cert, "Get X.509 from PKCS#11");
+ 		write_cert(parms.cert);
++#endif
+ 	} else {
+ 		BIO *b;
+ 		X509 *x509;
+diff --git a/scripts/sign-file.c b/scripts/sign-file.c
+index 12acc70e5a7a..d8861cd00cdc 100644
+--- a/scripts/sign-file.c
++++ b/scripts/sign-file.c
+@@ -144,6 +144,9 @@ static EVP_PKEY *read_private_key(const char *private_key_name)
+ 	EVP_PKEY *private_key;
+ 
+ 	if (!strncmp(private_key_name, "pkcs11:", 7)) {
++#ifdef OPENSSL_NO_ENGINE
++		ERR(1, "PKCS#11 needs the OpenSSL ENGINE API");
++#else
+ 		ENGINE *e;
+ 
+ 		ENGINE_load_builtin_engines();
+@@ -159,6 +162,7 @@ static EVP_PKEY *read_private_key(const char *private_key_name)
+ 			    "Set PKCS#11 PIN");
+ 		private_key = ENGINE_load_private_key(e, private_key_name,
+ 						      NULL, NULL);
++#endif
+ 		ERR(!private_key, "%s", private_key_name);
+ 	} else {
+ 		BIO *b;
