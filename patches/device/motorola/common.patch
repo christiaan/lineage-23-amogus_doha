@@ -1,3 +1,32 @@
+diff --git a/Android.bp b/Android.bp
+index e69df8d..8089679 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -2,5 +2,8 @@ soong_namespace {
+     imports: [
+         "hardware/google/interfaces",
+         "hardware/google/pixel",
++        "hardware/google/pixel/pixelstats",
++        "hardware/google/pixel/power-libperfmgr",
++        "hardware/google/pixel/usb",
+     ],
+ }
+diff --git a/common.mk b/common.mk
+index 7207c9e..e36f9c5 100644
+--- a/common.mk
++++ b/common.mk
+@@ -164,7 +164,10 @@ PRODUCT_SOONG_NAMESPACES += \
+ ## Enable pixel soong namespace for Pixel USB and Power HAL
+ PRODUCT_SOONG_NAMESPACES += \
+     hardware/google/interfaces \
+-    hardware/google/pixel
++    hardware/google/pixel \
++    hardware/google/pixel/pixelstats \
++    hardware/google/pixel/power-libperfmgr \
++    hardware/google/pixel/usb
+ 
+ # APEX
+ $(call inherit-product, $(SRC_TARGET_DIR)/product/updatable_apex.mk)
 diff --git a/hardware/qcom/product.mk b/hardware/qcom/product.mk
 index 2422560..b943ce7 100644
 --- a/hardware/qcom/product.mk
@@ -22,6 +51,40 @@ index c296fe1..b3a09d2 100644
      ],
      srcs: [
          "aidl/BackgroundWorker.cpp",
+diff --git a/power-libperfmgr/aidl/SupportManager.cpp b/power-libperfmgr/aidl/SupportManager.cpp
+index 85caf49..73bf665 100644
+--- a/power-libperfmgr/aidl/SupportManager.cpp
++++ b/power-libperfmgr/aidl/SupportManager.cpp
+@@ -86,6 +86,7 @@ constexpr SupportList<SessionMode> kSessionModeEarliestVersion = {
+   {SessionMode::GRAPHICS_PIPELINE, 6},
+   {SessionMode::AUTO_CPU, 6},
+   {SessionMode::AUTO_GPU, 6},
++  {SessionMode::AUDIO_PERFORMANCE, 7},
+ };
+ 
+ constexpr SupportList<SessionTag> kSessionTagEarliestVersion {
+@@ -218,6 +219,8 @@ bool SupportManager::sessionModeSupported(SessionMode type) {
+             return false;
+         case SessionMode::GRAPHICS_PIPELINE:
+             return false;
++        case SessionMode::AUDIO_PERFORMANCE:
++            return false;
+         default:
+             return true;
+     }
+diff --git a/power-libperfmgr/aidl/android.hardware.power-service.moto-common.xml b/power-libperfmgr/aidl/android.hardware.power-service.moto-common.xml
+index 1bb73f3..32fee5a 100644
+--- a/power-libperfmgr/aidl/android.hardware.power-service.moto-common.xml
++++ b/power-libperfmgr/aidl/android.hardware.power-service.moto-common.xml
+@@ -1,7 +1,7 @@
+ <manifest version="1.0" type="device">
+     <hal format="aidl">
+         <name>android.hardware.power</name>
+-        <version>6</version>
++        <version>7</version>
+         <fqname>IPower/default</fqname>
+     </hal>
+ </manifest>
 diff --git a/rootdir/vendor/bin/init.oem.fingerprint2.sh b/rootdir/vendor/bin/init.oem.fingerprint2.sh
 index 4af13b7..7fe2a12 100644
 --- a/rootdir/vendor/bin/init.oem.fingerprint2.sh
