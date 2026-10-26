@@ -128,7 +128,7 @@ index 49a23af..3689b0b 100644
  r_dir_file(hal_usb_impl, vendor_sysfs_usb_supply)
  allow hal_usb_impl vendor_sysfs_usb_supply:file w_file_perms;
 diff --git a/vintf/manifest-qcom.xml b/vintf/manifest-qcom.xml
-index fbb2b3c..819d7aa 100644
+index fbb2b3c..fba9521 100644
 --- a/vintf/manifest-qcom.xml
 +++ b/vintf/manifest-qcom.xml
 @@ -1,4 +1,4 @@
@@ -172,10 +172,9 @@ index fbb2b3c..819d7aa 100644
      <hal format="hidl">
          <name>vendor.qti.hardware.radio.am</name>
          <transport>hwbinder</transport>
-@@ -398,5 +383,5 @@
+@@ -398,5 +383,4 @@
          <name>vendor.qti.power.pasrmanager</name>
          <transport>hwbinder</transport>
      </hal>
 -    <kernel target-level="5"/>
-+    <kernel target-level="7"/>
  </manifest>
