@@ -1,3 +1,108 @@
+diff --git a/arch/arm64/configs/vendor/amogus_defconfig b/arch/arm64/configs/vendor/amogus_defconfig
+index 2ac915b04add..866954d2dc75 100644
+--- a/arch/arm64/configs/vendor/amogus_defconfig
++++ b/arch/arm64/configs/vendor/amogus_defconfig
+@@ -179,6 +179,7 @@ CONFIG_DEFAULT_USE_ENERGY_AWARE=y
+ # CONFIG_RELAY is not set
+ CONFIG_BLK_DEV_INITRD=y
+ CONFIG_INITRAMFS_SOURCE=""
++CONFIG_INITRAMFS_IGNORE_SKIP_FLAG=y
+ CONFIG_RD_GZIP=y
+ CONFIG_RD_BZIP2=y
+ CONFIG_RD_LZMA=y
+@@ -5286,6 +5287,7 @@ CONFIG_SDFAT_UEVENT=y
+ # Pseudo filesystems
+ #
+ CONFIG_PROC_FS=y
++CONFIG_PROC_CMDLINE_APPEND_ANDROID_FORCE_NORMAL_BOOT=y
+ # CONFIG_PROC_KCORE is not set
+ CONFIG_PROC_SYSCTL=y
+ CONFIG_PROC_PAGE_MONITOR=y
+diff --git a/fs/proc/Kconfig b/fs/proc/Kconfig
+index 08dce22afec1..967de641703d 100644
+--- a/fs/proc/Kconfig
++++ b/fs/proc/Kconfig
+@@ -88,3 +88,14 @@ config PROC_UID
+ 	depends on PROC_FS && RT_MUTEXES
+ 	help
+ 	Provides aggregated per-uid information under /proc/uid.
++
++config PROC_CMDLINE_APPEND_ANDROID_FORCE_NORMAL_BOOT
++	bool "Append androidboot.force_normal_boot=1 to cmdline if skip_initramfs is present"
++	default n
++	help
++	  If `skip_initramfs` is present in the kernel cmdline, then append
++	  `androidboot.force_normal_boot=1` to the cmdline string that we present
++	  in /proc/cmdline.
++
++	  This is a workaround to allow recovery-as-boot A/B devices that
++	  launched with Android 9 to use two-stage init.
+diff --git a/fs/proc/cmdline.c b/fs/proc/cmdline.c
+index 403cbb12a6e9..18c32e2b4475 100644
+--- a/fs/proc/cmdline.c
++++ b/fs/proc/cmdline.c
+@@ -3,10 +3,51 @@
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+ #include <linux/seq_file.h>
++#include <asm/setup.h>
++
++#if defined(CONFIG_INITRAMFS_IGNORE_SKIP_FLAG) || \
++    defined(CONFIG_PROC_CMDLINE_APPEND_ANDROID_FORCE_NORMAL_BOOT)
++#define INITRAMFS_STR_FIND "skip_initramf"
++#endif
++
++#ifdef CONFIG_INITRAMFS_IGNORE_SKIP_FLAG
++#define INITRAMFS_STR_REPLACE "want_initramf"
++#define INITRAMFS_STR_LEN (sizeof(INITRAMFS_STR_FIND) - 1)
++#endif
++
++#ifdef CONFIG_PROC_CMDLINE_APPEND_ANDROID_FORCE_NORMAL_BOOT
++#define ANDROID_FORCE_NORMAL_BOOT_STR "androidboot.force_normal_boot=1"
++#endif
++
++static char proc_command_line[COMMAND_LINE_SIZE];
++
++static void proc_command_line_init(void) {
++	char *offset_addr;
++	char *proc_command_line_tail;
++
++	strcpy(proc_command_line, saved_command_line);
++
++#ifdef CONFIG_INITRAMFS_IGNORE_SKIP_FLAG
++	offset_addr = strstr(proc_command_line, INITRAMFS_STR_FIND);
++	if (offset_addr)
++		memcpy(offset_addr, INITRAMFS_STR_REPLACE, INITRAMFS_STR_LEN);
++#endif
++
++
++#ifdef CONFIG_PROC_CMDLINE_APPEND_ANDROID_FORCE_NORMAL_BOOT
++	if (strstr(saved_command_line, INITRAMFS_STR_FIND)) {
++		// point proc_command_line_tail to the null terminator of the cmdline
++		proc_command_line_tail = proc_command_line + strlen(proc_command_line);
++		memcpy(proc_command_line_tail, " ", 1);
++		memcpy(proc_command_line_tail + 1, ANDROID_FORCE_NORMAL_BOOT_STR,
++                        sizeof(ANDROID_FORCE_NORMAL_BOOT_STR));
++	}
++#endif
++}
+ 
+ static int cmdline_proc_show(struct seq_file *m, void *v)
+ {
+-	seq_printf(m, "%s\n", saved_command_line);
++	seq_printf(m, "%s\n", proc_command_line);
+ 	return 0;
+ }
+ 
+@@ -24,6 +65,8 @@ static const struct file_operations cmdline_proc_fops = {
+ 
+ static int __init proc_cmdline_init(void)
+ {
++	proc_command_line_init();
++
+ 	proc_create("cmdline", 0, NULL, &cmdline_proc_fops);
+ 	return 0;
+ }
 diff --git a/include/uapi/linux/nl80211.h b/include/uapi/linux/nl80211.h
 index 709a1f6cf8c9..8402cf4b3554 100644
 --- a/include/uapi/linux/nl80211.h
@@ -10,6 +115,19 @@ index 709a1f6cf8c9..8402cf4b3554 100644
  };
  
  /**
+diff --git a/init/initramfs.c b/init/initramfs.c
+index 33fdbdc19ad7..431ea8fa60cf 100644
+--- a/init/initramfs.c
++++ b/init/initramfs.c
+@@ -614,7 +614,7 @@ static int __init skip_initramfs_param(char *str)
+ {
+ 	if (*str)
+ 		return 0;
+-	do_skip_initramfs = 1;
++	do_skip_initramfs = !IS_ENABLED(CONFIG_INITRAMFS_IGNORE_SKIP_FLAG);
+ 	return 1;
+ }
+ __setup("skip_initramfs", skip_initramfs_param);
 diff --git a/kernel/sched/core.c b/kernel/sched/core.c
 index 51ce59fec545..270161f592b9 100644
 --- a/kernel/sched/core.c
@@ -89,3 +207,25 @@ index 12acc70e5a7a..d8861cd00cdc 100644
  		ERR(!private_key, "%s", private_key_name);
  	} else {
  		BIO *b;
+diff --git a/usr/Kconfig b/usr/Kconfig
+index 8b4826de1189..de9d04f2c0be 100644
+--- a/usr/Kconfig
++++ b/usr/Kconfig
+@@ -32,6 +32,17 @@ config INITRAMFS_FORCE
+ 	  and is useful if you cannot or don't want to change the image
+ 	  your bootloader passes to the kernel.
+ 
++config INITRAMFS_IGNORE_SKIP_FLAG
++	bool "Force initramfs even when skip_initramfs is set"
++	default n
++	help
++	  Ignore skip_initramfs cmdline flag.
++
++	  This should only be used if you have no control over cmdline
++	  passed by your bootloader yet you can't use CMDLINE_FORCE.
++
++	  If unsure say N.
++
+ config INITRAMFS_ROOT_UID
+ 	int "User ID to map to 0 (user root)"
+ 	depends on INITRAMFS_SOURCE!=""
