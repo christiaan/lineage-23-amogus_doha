@@ -54,7 +54,7 @@ several years of upstream security and stability fixes. `uname -r` shows
 ## Building
 
 ```sh
-git clone http://192.168.1.18:3000/claude/lineage-23.2-amogus_doha.git doha-lineage
+git clone https://github.com/christiaan/lineage-23-amogus_doha.git doha-lineage
 mkdir -p ~/doha/src ~/doha/ccache ~/doha/zips
 
 docker run --rm -it \
