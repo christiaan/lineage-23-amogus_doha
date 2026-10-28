@@ -25,8 +25,24 @@ index 1a6f520..7ff828b 100644
  
  include $(CLEAR_VARS)
  LOCAL_MODULE := amogus_folders
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index d7cdd2b..27d65c3 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -37,7 +37,10 @@ TARGET_COPY_OUT_VENDOR := vendor
+ BOARD_BOOTIMAGE_PARTITION_SIZE := 67108864
+ BOARD_EROFS_PCLUSTER_SIZE := 262144
+ BOARD_RECOVERYIMAGE_PARTITION_SIZE := $(BOARD_BOOTIMAGE_PARTITION_SIZE)
+-BOARD_SYSTEMIMAGE_FILE_SYSTEM_TYPE := erofs
++# system is ext4, not erofs, so addon packages such as MindTheGapps can
++# mount it read-write from Lineage Recovery. LineageOS requires that
++# addon packages listed on its wiki install this way. vendor stays erofs.
++BOARD_SYSTEMIMAGE_FILE_SYSTEM_TYPE := ext4
+ BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := erofs
+ ifneq ($(TARGET_DEVICE),amogus_doha)
+   ## Build product image
 diff --git a/device.mk b/device.mk
-index 9caa77f..6a57fdb 100644
+index 9caa77f..344be9e 100644
 --- a/device.mk
 +++ b/device.mk
 @@ -19,6 +19,12 @@ PLATFORM_COMMON_PATH := device/motorola/amogus
@@ -42,6 +58,25 @@ index 9caa77f..6a57fdb 100644
  AB_OTA_PARTITIONS += \
      boot \
      dtbo \
+@@ -35,7 +41,6 @@ endif
+ AB_OTA_POSTINSTALL_CONFIG := \
+     RUN_POSTINSTALL_system=true \
+     POSTINSTALL_PATH_system=system/bin/otapreopt_script \
+-    FILESYSTEM_TYPE_system=erofs \
+     POSTINSTALL_OPTIONAL_system=true
+ 
+ # AAPT
+@@ -57,7 +62,9 @@ PRODUCT_PACKAGES += \
+     libgui_vendor
+ 
+ # Device Characteristics
+-DEVICE_CHARACTERISTICS += fm erofs
++# No erofs: device/motorola/common reads it to pick system's filesystem
++# type for the fstab check and FILESYSTEM_TYPE_system (system is ext4).
++DEVICE_CHARACTERISTICS += fm
+ 
+ # Device Folders
+ PRODUCT_PACKAGES += \
 diff --git a/proprietary-files.txt b/proprietary-files.txt
 index 52c0155..32abba9 100644
 --- a/proprietary-files.txt
@@ -62,6 +97,18 @@ index 52c0155..32abba9 100644
  vendor/lib64/libqsocket.so
  vendor/lib64/libril-qc-hal-qmi.so
  vendor/lib64/libril-qc-logger.so
+diff --git a/rootdir/fstab.qcom b/rootdir/fstab.qcom
+index 269265a..fb1dff5 100644
+--- a/rootdir/fstab.qcom
++++ b/rootdir/fstab.qcom
+@@ -6,6 +6,7 @@
+ # Currently we dont have e2fsck compiled. So fs check would failed.
+ 
+ #<src>                                                 <mnt_point>               <type>  <mnt_flags and options>                            <fs_mgr_flags>
++/dev/block/by-name/system                               /                        ext4     ro,barrier=1                       wait,slotselect,first_stage_mount
+ /dev/block/by-name/system                               /                        erofs    ro                                 wait,slotselect,first_stage_mount
+ /dev/block/by-name/vendor                               /vendor                  erofs    ro                                 wait,slotselect,first_stage_mount
+ /dev/block/bootdevice/by-name/userdata                  /data                    f2fs    rw,discard,nosuid,nodev,noatime,nodiratime,quota,nobarrier,reserve_root=32768,resgid=1065   latemount,wait,check,formattable,quota,reservedsize=128M
 diff --git a/sepolicy/file.te b/sepolicy/file.te
 index 4e0bc64..20473d5 100644
 --- a/sepolicy/file.te
