@@ -180,8 +180,8 @@ it differs in these ways:
   `adb sideload` as described under Installing.
 - **Firmware is not managed for you.** The zip doesn't contain Motorola
   firmware, and the install steps don't copy it to the second slot. Both
-  slots should run the latest stock firmware for doha (Android 10, `QPIS30.28-Q3-28-26-4-1-3`) before
-  you install.
+  slots should run the latest stock firmware for doha (Android 10)
+  before you install.
 - **No dm-verity on vendor.** Verified boot is turned off in `vbmeta`
   (`--flags 2`). Official devices turn verity off for system too, but
   should keep it on for vendor.
