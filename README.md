@@ -169,6 +169,30 @@ Not verified yet: Bluetooth headset call audio (HFP); traffic from a
 tethered device through mobile data (hotspot and USB tethering were tested
 with mobile data off); 464XLAT on IPv6-only mobile networks.
 
+## Differences from an official LineageOS device
+
+This build isn't official. Measured against LineageOS's
+[device support requirements](https://github.com/LineageOS/charter/blob/main/device-support-requirements.md),
+it differs in these ways:
+
+- **No updates through the Updater app.** There is no update server for
+  `amogus_doha`, so the Updater app finds nothing. Update with
+  `adb sideload` as described under Installing.
+- **Firmware is not managed for you.** The zip doesn't contain Motorola
+  firmware, and the install steps don't copy it to the second slot. Both
+  slots should run the latest stock firmware for doha (Android 10, `QPIS30.28-Q3-28-26-4-1-3`) before
+  you install.
+- **No dm-verity on vendor.** Verified boot is turned off in `vbmeta`
+  (`--flags 2`). Official devices turn verity off for system too, but
+  should keep it on for vendor.
+- **No LiveDisplay colour adjustment.**
+- **Recovery touch doesn't work** (use the volume and power keys).
+- **Hardware variants**: the build supports every Moto G8 Plus, but only
+  a unit with the Himax touch panel and the FPC fingerprint sensor has
+  been tested. FocalTech and Novatek touch panels, the Egistec
+  fingerprint sensor, and the units without NFC or the ToF sensor are
+  untested.
+
 ---
 
 ## The fixes, and why each one is needed
