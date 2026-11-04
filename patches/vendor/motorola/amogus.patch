@@ -18,3 +18,14 @@ index 7e32a4e..336592c 100644
      vendor/motorola/amogus/proprietary/vendor/lib64/libqsocket.so:$(TARGET_COPY_OUT_VENDOR)/lib64/libqsocket.so \
      vendor/motorola/amogus/proprietary/vendor/lib64/libqtigef.so:$(TARGET_COPY_OUT_VENDOR)/lib64/libqtigef.so \
      vendor/motorola/amogus/proprietary/vendor/lib64/librcc.so:$(TARGET_COPY_OUT_VENDOR)/lib64/librcc.so \
+diff --git a/proprietary/vendor/lib/libmmcamera_mot_ov16885.so b/proprietary/vendor/lib/libmmcamera_mot_ov16885.so
+index 8442bf13b69cc587e86f4e7890d66c18238f676f..1a6be0f1cd153eef282f4d85e14164d6262d9740 100644
+GIT binary patch
+delta 74
+zcmdn8+i=Tn!wog5oLmeH3`{`GIJq=+Gb4MmWm>ys8Y2)h0WmWWvj8zG5VHX>I}mdK
+PF((jnZMRJ0uKo@HMyeLL
+
+delta 74
+zcmdn8+i=Tn!wog5lMgU*OrDauWby%afyp|I9L)}C?G9;-K+FWh%s|Wn#H>Kf2E^<@
+R%mKulK+Lt>A&tA_I{+zE8ifD=
+
