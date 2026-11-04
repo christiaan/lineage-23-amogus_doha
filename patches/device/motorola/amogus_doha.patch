@@ -27,3 +27,83 @@ index 9e00b92..b617293 100644
  # Partitions
  BOARD_VENDORIMAGE_PARTITION_SIZE := 620756992
  BOARD_SYSTEMIMAGE_PARTITION_SIZE := 3238002688
+diff --git a/device.mk b/device.mk
+index 9051022..3a6b5b6 100644
+--- a/device.mk
++++ b/device.mk
+@@ -27,7 +27,8 @@ TARGET_USES_FINGERPRINT_V2_1 := true
+ # Overlays
+ PRODUCT_PACKAGES += \
+     dohaFrameworkOverlay \
+-    dohaSystemUIOverlay
++    dohaSystemUIOverlay \
++    dohaApertureOverlay
+ 
+ # Partitions
+ TARGET_USES_DYNAMIC_PARTITIONS := false
+diff --git a/rro_overlays/ApertureOverlays/Android.mk b/rro_overlays/ApertureOverlays/Android.mk
+new file mode 100644
+index 0000000..6361f9b
+--- /dev/null
++++ b/rro_overlays/ApertureOverlays/Android.mk
+@@ -0,0 +1,2 @@
++LOCAL_PATH := $(call my-dir)
++include $(call all-makefiles-under,$(LOCAL_PATH))
+diff --git a/rro_overlays/ApertureOverlays/doha_overlay/Android.mk b/rro_overlays/ApertureOverlays/doha_overlay/Android.mk
+new file mode 100644
+index 0000000..9b99bb6
+--- /dev/null
++++ b/rro_overlays/ApertureOverlays/doha_overlay/Android.mk
+@@ -0,0 +1,17 @@
++LOCAL_PATH := $(call my-dir)
++include $(CLEAR_VARS)
++
++LOCAL_IS_RUNTIME_RESOURCE_OVERLAY := true
++
++LOCAL_CERTIFICATE := platform
++
++LOCAL_PACKAGE_NAME := dohaApertureOverlay
++
++LOCAL_RESOURCE_DIR := \
++    $(LOCAL_PATH)/res
++
++LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR)/overlay/dohaApertureOverlay
++
++LOCAL_SDK_VERSION := current
++
++include $(BUILD_PACKAGE)
+diff --git a/rro_overlays/ApertureOverlays/doha_overlay/AndroidManifest.xml b/rro_overlays/ApertureOverlays/doha_overlay/AndroidManifest.xml
+new file mode 100644
+index 0000000..f88b30d
+--- /dev/null
++++ b/rro_overlays/ApertureOverlays/doha_overlay/AndroidManifest.xml
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Lets LineageOS's camera app (Aperture) use doha's ultra-wide
++     action camera, which the HAL exposes as auxiliary camera 3. -->
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="org.lineageos.aperture.doha.overlay">
++    <application android:hasCode="false" />
++    <overlay
++        android:isStatic="true"
++        android:priority="10"
++        android:targetPackage="org.lineageos.aperture" />
++</manifest>
+diff --git a/rro_overlays/ApertureOverlays/doha_overlay/res/values/config.xml b/rro_overlays/ApertureOverlays/doha_overlay/res/values/config.xml
+new file mode 100644
+index 0000000..4947f89
+--- /dev/null
++++ b/rro_overlays/ApertureOverlays/doha_overlay/res/values/config.xml
+@@ -0,0 +1,12 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <!-- Show the auxiliary cameras: camera 3 is the 16 MP ultra-wide
++         action camera (ov16885). -->
++    <bool name="config_enableAuxCameras">true</bool>
++
++    <!-- Camera 2 is the 5 MP depth sensor (s5k5e9). It only exists to
++         help the main camera with portrait blur, not to take pictures. -->
++    <string-array name="config_ignoredAuxCameraIds">
++        <item>2</item>
++    </string-array>
++</resources>
