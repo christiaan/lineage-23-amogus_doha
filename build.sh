@@ -161,7 +161,6 @@ set +eu
 source build/envsetup.sh
 breakfast "$DEVICE" userdebug || exit 1
 mka -j"$JOBS" target-files-package bacon || exit 1
-version=$(get_build_var LINEAGE_VERSION) || exit 1
 set -eu
 
 # bacon hard-links the dated zip to lineage_<device>-ota.zip, which the next
@@ -170,7 +169,14 @@ set -eu
 product=$SRC/out/target/product/$DEVICE
 images=$product/obj/PACKAGING/target_files_intermediates/lineage_$DEVICE-target_files/IMAGES
 dest=${ZIP_DIR:-$(dirname "$SRC")/zips}
-name=lineage-$version
+# Take the name from the dated zip that bacon linked to the -ota.zip.
+# Asking get_build_var for LINEAGE_VERSION here gives today's date, which
+# is wrong when the build ran past midnight UTC (doha_android#55). /e/'s
+# vendor/lineage names the zip e-<version>.zip instead of lineage-<version>.zip.
+ota=$product/lineage_$DEVICE-ota.zip
+zip=$(find "$product" -maxdepth 1 -name '*.zip' ! -name "${ota##*/}" -samefile "$ota" | head -1)
+[ -n "$zip" ] || { echo "No dated zip hard-linked to $ota" >&2; exit 1; }
+name=$(basename "$zip" .zip)
 mkdir -p "$dest"
 cp "$product/$name.zip" "$dest/$name.zip"
 for img in boot dtbo vbmeta; do
