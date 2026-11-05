@@ -328,7 +328,7 @@
   <project name="android_device_sony_sepolicy" path="device/sony/sepolicy" remote="moto-common" revision="f80fb521f326f5a8e1b19451594bf6ddbd727b82" upstream="master" dest-branch="master" groups="local::doha"/>
   <project name="android_external_fastrpc" path="external/fastrpc" remote="aospa" revision="a83e9c19925dcaf77fa42aefaa0be8eed74e4974" upstream="uvite" dest-branch="uvite" groups="local::doha"/>
   <project name="android_hardware_motorola" path="hardware/motorola" remote="moto-common" revision="f805e9ef6f64e0dad5b9ee47cc6e094a2b3db9b0" upstream="master" dest-branch="master" groups="local::doha"/>
-  <project name="christiaan/android_kernel_motorola_msm-4.14" path="kernel/motorola/msm-4.14" remote="github" revision="97b493156687ce324bde2a0d73d9df90e1466249" upstream="lts" dest-branch="lts" groups="local::doha"/>
+  <project name="christiaan/android_kernel_motorola_msm-4.14" path="kernel/motorola/msm-4.14" remote="github" revision="52885f01cd5cc3b392c81bfbd3f4456a7ac8d990" upstream="lts" dest-branch="lts" groups="local::doha"/>
   <project name="android_vendor_motorola_amogus" path="vendor/motorola/amogus" remote="aldair402" revision="85187ccfe24f696f8ccfc68f2f03529fc0caa98f" upstream="15" dest-branch="15" groups="local::doha"/>
   <project name="android_vendor_motorola_amogus_doha" path="vendor/motorola/amogus_doha" remote="aldair402" revision="7b6d8adfee61b37bea3f08715d89936dd74d6849" upstream="14" dest-branch="14" groups="local::doha"/>
   <project name="android_vendor_motorola_common" path="vendor/motorola/common" remote="moto-common" revision="5cfff4dfe2e257fd1c9df4176ffd1bbf3bd99f20" upstream="14" dest-branch="14" groups="local::doha"/>
