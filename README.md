@@ -146,7 +146,7 @@ Things you should know:
   one slot holds a known-good ROM you want to keep, make that slot the
   active one before you sideload (`fastboot --set-active=<slot>`).
 - During the sideload, the transfer slows down a lot at around 47%.
-  Tapping the phone's screen speeds it up again.
+  It still finishes; leave it running.
 - `adb sideload` doesn't exit until you answer the additional-zip prompt
   from step 3 (not with `sideload-auto-reboot`, which has no prompt).
 - When you flash `vbmeta`, the bootloader prints
