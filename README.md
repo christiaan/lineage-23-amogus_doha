@@ -145,8 +145,9 @@ Things you should know:
 - **Recovery installs to the inactive slot** and then switches to it. If
   one slot holds a known-good ROM you want to keep, make that slot the
   active one before you sideload (`fastboot --set-active=<slot>`).
-- During the sideload, the transfer slows down a lot at around 47%.
-  Tapping the phone's screen speeds it up again.
+- During the sideload, the progress on the computer stops at around 47%
+  while the phone installs the package. `adb` may then exit with
+  `adb: failed to read command: Success`; that is harmless.
 - `adb sideload` doesn't exit until you answer the additional-zip prompt
   from step 3 (not with `sideload-auto-reboot`, which has no prompt).
 - When you flash `vbmeta`, the bootloader prints
