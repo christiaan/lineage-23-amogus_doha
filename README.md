@@ -115,6 +115,22 @@ reports throttling (the default is 40). With Docker, pass these as
 The build is `userdebug`, unsigned (it uses the AOSP test keys) and has no
 GApps.
 
+### Test builds with your adb key
+
+For a test phone you can bake your own adb public key into the build, so
+adb works in recovery and in Android right after a wipe, with no
+"Allow USB debugging?" dialog:
+
+```sh
+  -v ~/.android/adbkey.pub:/adbkey.pub:ro -e ADB_KEY=/adbkey.pub \
+```
+
+Recovery and the system trust only that key (`ro.adb.secure` stays on),
+and USB debugging is on by default. The output gets an `-adbkey` suffix.
+Don't share such a build: whoever holds the matching private key gets
+adb on every phone that runs it. A later build without `ADB_KEY` removes
+the key from `out/` again.
+
 ## Installing
 
 You need an unlocked bootloader. The phone is A/B, and the recovery is
