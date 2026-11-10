@@ -16,6 +16,11 @@
 #   ZIP_DIR       where finished builds are copied (default: zips/ next to
 #                 SOURCE_DIR)
 #   SKIP_SYNC=1   don't run repo init or repo sync
+#   ADB_KEY       test builds only: an adb public key (adbkey.pub) to trust
+#                 in recovery and Android, with USB adb on by default, so
+#                 adb works after a wipe without tapping "Allow"
+#                 (doha_android#64). The zip gets an -adbkey suffix. Never
+#                 release such a build.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -148,6 +153,40 @@ for proj in "${projects[@]}"; do
 done > "$STAMP.new"
 mv "$STAMP.new" "$STAMP"
 
+# Test builds can trust the build host's adb key (doha_android#64), through
+# vendor/extra/product.mk, which vendor/lineage/config/common.mk inherits
+# when it exists. It isn't in the manifest, so repo never touches it.
+# PRODUCT_ADB_KEYS isn't used: Soong installs it only when ro.debuggable=1,
+# and LineageOS userdebug builds set ro.debuggable=0.
+product=$SRC/out/target/product/$DEVICE
+key_files=("$product/recovery/root/system/product/etc/security/adb_keys" "$product/product/etc/security/adb_keys")
+rm -rf vendor/extra
+if [ -n "${ADB_KEY:-}" ]; then
+  key=$(cat "$ADB_KEY")
+  case $key in
+    QAAAA*) ;;
+    *) echo "ADB_KEY must be an adb public key (adbkey.pub): $ADB_KEY" >&2; exit 1 ;;
+  esac
+  mkdir -p vendor/extra
+  printf '%s\n' "$key" > vendor/extra/adb_keys
+  cat > vendor/extra/product.mk <<'MK'
+# Written by doha-lineage build.sh because ADB_KEY was set (doha_android#64).
+# Recovery's adbd and the system's adbd both trust /adb_keys, a symlink to
+# /product/etc/security/adb_keys in both ramdisks. In recovery /product
+# points to /system/product inside the ramdisk, so the key goes there; a
+# file at recovery's /adb_keys is replaced by the symlink. ro.adb.secure
+# stays 1.
+PRODUCT_COPY_FILES += \
+    vendor/extra/adb_keys:$(TARGET_COPY_OUT_RECOVERY)/root/system/product/etc/security/adb_keys \
+    vendor/extra/adb_keys:$(TARGET_COPY_OUT_PRODUCT)/etc/security/adb_keys
+PRODUCT_SYSTEM_DEFAULT_PROPERTIES += persist.sys.usb.config=adb
+MK
+else
+  # Copied files stay in out/ after their rule is gone and would end up in
+  # the images, so a normal build after a test build must delete them.
+  rm -f "${key_files[@]}"
+fi
+
 export ALLOW_MISSING_DEPENDENCIES=true
 if command -v ccache >/dev/null; then
   export USE_CCACHE=1 CCACHE_EXEC=$(command -v ccache)
@@ -164,15 +203,21 @@ mka -j"$JOBS" target-files-package bacon || exit 1
 version=$(get_build_var LINEAGE_VERSION) || exit 1
 set -eu
 
+if [ -z "${ADB_KEY:-}" ]; then
+  for f in "${key_files[@]}"; do
+    [ ! -e "$f" ] || { echo "$f exists in a build without ADB_KEY" >&2; exit 1; }
+  done
+fi
+
 # bacon hard-links the dated zip to lineage_<device>-ota.zip, which the next
 # build rewrites in place, so every earlier zip in out/ ends up holding the
 # newest build. Keep a real copy of each build, with its images.
-product=$SRC/out/target/product/$DEVICE
 images=$product/obj/PACKAGING/target_files_intermediates/lineage_$DEVICE-target_files/IMAGES
 dest=${ZIP_DIR:-$(dirname "$SRC")/zips}
-name=lineage-$version
+built=lineage-$version
+name=$built${ADB_KEY:+-adbkey}
 mkdir -p "$dest"
-cp "$product/$name.zip" "$dest/$name.zip"
+cp "$product/$built.zip" "$dest/$name.zip"
 for img in boot dtbo vbmeta; do
   cp "$images/$img.img" "$dest/$name-$img.img"
 done
