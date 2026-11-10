@@ -126,7 +126,10 @@ adb works in recovery and in Android right after a wipe, with no
 ```
 
 Recovery and the system trust only that key (`ro.adb.secure` stays on),
-and USB debugging is on by default. The output gets an `-adbkey` suffix.
+and USB debugging is on by default. Switching from a build without the key needs a
+data wipe: if `/data` was set up with USB debugging off, Android 16's
+trade-in mode takes over adb until the setup wizard is done, and only
+`adb shell tradeinmode ...` works. The output gets an `-adbkey` suffix.
 Don't share such a build: whoever holds the matching private key gets
 adb on every phone that runs it. A later build without `ADB_KEY` removes
 the key from `out/` again.
