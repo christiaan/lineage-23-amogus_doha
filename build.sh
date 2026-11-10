@@ -159,7 +159,7 @@ mv "$STAMP.new" "$STAMP"
 # PRODUCT_ADB_KEYS isn't used: Soong installs it only when ro.debuggable=1,
 # and LineageOS userdebug builds set ro.debuggable=0.
 product=$SRC/out/target/product/$DEVICE
-key_files=("$product/recovery/root/adb_keys" "$product/product/etc/security/adb_keys")
+key_files=("$product/recovery/root/system/product/etc/security/adb_keys" "$product/product/etc/security/adb_keys")
 rm -rf vendor/extra
 if [ -n "${ADB_KEY:-}" ]; then
   key=$(cat "$ADB_KEY")
@@ -171,10 +171,13 @@ if [ -n "${ADB_KEY:-}" ]; then
   printf '%s\n' "$key" > vendor/extra/adb_keys
   cat > vendor/extra/product.mk <<'MK'
 # Written by doha-lineage build.sh because ADB_KEY was set (doha_android#64).
-# Recovery's adbd and the system's adbd both trust /adb_keys; in the system
-# it is a symlink to /product/etc/security/adb_keys. ro.adb.secure stays 1.
+# Recovery's adbd and the system's adbd both trust /adb_keys, a symlink to
+# /product/etc/security/adb_keys in both ramdisks. In recovery /product
+# points to /system/product inside the ramdisk, so the key goes there; a
+# file at recovery's /adb_keys is replaced by the symlink. ro.adb.secure
+# stays 1.
 PRODUCT_COPY_FILES += \
-    vendor/extra/adb_keys:$(TARGET_COPY_OUT_RECOVERY)/root/adb_keys \
+    vendor/extra/adb_keys:$(TARGET_COPY_OUT_RECOVERY)/root/system/product/etc/security/adb_keys \
     vendor/extra/adb_keys:$(TARGET_COPY_OUT_PRODUCT)/etc/security/adb_keys
 PRODUCT_SYSTEM_DEFAULT_PROPERTIES += persist.sys.usb.config=adb
 MK
