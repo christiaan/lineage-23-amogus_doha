@@ -45,3 +45,36 @@ index 3a3b7cd9d9fb..973e163811d5 100644
  }
  
  static int nl80211_authenticate(struct sk_buff *skb, struct genl_info *info)
+diff --git a/drivers/input/touchscreen/focaltech_0flash_mmi_doha/focaltech_flash.c b/drivers/input/touchscreen/focaltech_0flash_mmi_doha/focaltech_flash.c
+index b70156a71f98..1dddc40ff13f 100755
+--- a/drivers/input/touchscreen/focaltech_0flash_mmi_doha/focaltech_flash.c
++++ b/drivers/input/touchscreen/focaltech_0flash_mmi_doha/focaltech_flash.c
+@@ -265,8 +265,15 @@ int fts_fw_resume(bool need_reset)
+     char fwname[FILE_NAME_LENGTH] = { 0 };
+ 
+     FTS_INFO("fw upgrade resume function");
+-    if (!upg || !upg->fw) {
+-        FTS_ERROR("upg/fw is null");
++    /*
++     * upg->fw (the copy fts_fwupg_work loads at probe) is only the
++     * fallback below; this function requests the firmware itself. A
++     * doreflash write that lands while that work is still waiting for
++     * its firmware request (recovery, doha_android#49) used to fail
++     * here and leave the panel without firmware.
++     */
++    if (!upg || !upg->module_info) {
++        FTS_ERROR("upg/module_info is null");
+         return -EINVAL;
+     }
+ 
+@@ -283,6 +290,10 @@ int fts_fw_resume(bool need_reset)
+     if (ret != 0) {
+         FTS_ERROR("%s:firmware(%s) request fail,ret=%d\n",
+                   __func__, fwname, ret);
++        if (!upg->fw) {
++            FTS_ERROR("no fw to fall back to");
++            return ret;
++        }
+         FTS_INFO("download fw from bootimage");
+         ret = fts_fw_download(upg->fw, upg->fw_length, need_reset);
+     } else {
