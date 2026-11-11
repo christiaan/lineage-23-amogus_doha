@@ -56,10 +56,10 @@ index 9051022..c936ec2 100644
  $(call inherit-product-if-exists, vendor/motorola/amogus_doha/amogus_doha-vendor.mk)
 diff --git a/recovery/root/system/etc/init/touch_doha.rc b/recovery/root/system/etc/init/touch_doha.rc
 new file mode 100644
-index 0000000..006c029
+index 0000000..b8642da
 --- /dev/null
 +++ b/recovery/root/system/etc/init/touch_doha.rc
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,19 @@
 +# Recovery only (doha_android#49): touch for units with the Tianma
 +# FT8719 panel (FocalTech). Normal boot never reads this file.
 +#
@@ -69,6 +69,8 @@ index 0000000..006c029
 +# /vendor/bin/init.mmi.touch.sh, which recovery doesn't have. doha has
 +# one FocalTech panel and one firmware file for it, in recovery's
 +# /vendor/firmware (device.mk).
++# The driver drops the last character of what's written (it expects the
++# newline echo adds), hence the \n.
 +#
 +# On units with the Himax panel the FocalTech device tree node is
 +# disabled, so the module doesn't bind, and the Himax driver (built in)
@@ -76,7 +78,7 @@ index 0000000..006c029
 +on init
 +    exec u:r:modprobe:s0 -- /system/bin/modprobe -a -d /lib/modules focaltech_0flash_mmi_doha
 +    wait /sys/devices/platform/soc/4a88000.spi/spi_master/spi0/spi0.0/doreflash 2
-+    write /sys/devices/platform/soc/4a88000.spi/spi_master/spi0/spi0.0/doreflash focaltech-ft8719-a0-0000-doha.bin
++    write /sys/devices/platform/soc/4a88000.spi/spi_master/spi0/spi0.0/doreflash focaltech-ft8719-a0-0000-doha.bin\n
 diff --git a/sepolicy/recovery/init.te b/sepolicy/recovery/init.te
 new file mode 100644
 index 0000000..8971ac0
