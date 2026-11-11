@@ -55,14 +55,24 @@ index 9051022..c936ec2 100644
  $(call inherit-product-if-exists, vendor/motorola/amogus_doha/amogus_doha-vendor.mk)
 diff --git a/recovery/root/system/etc/init/touch_doha.rc b/recovery/root/system/etc/init/touch_doha.rc
 new file mode 100644
-index 0000000..218611a
+index 0000000..006c029
 --- /dev/null
 +++ b/recovery/root/system/etc/init/touch_doha.rc
-@@ -0,0 +1,7 @@
-+# Recovery only (doha_android#49): load the FocalTech touch driver for
-+# units with the Tianma FT8719 panel. Its firmware comes from
-+# /vendor/firmware in the recovery ramdisk (device.mk). On units with
-+# the Himax panel the device tree node is disabled, so the driver loads
-+# but doesn't bind. Normal boot never reads this file.
+@@ -0,0 +1,17 @@
++# Recovery only (doha_android#49): touch for units with the Tianma
++# FT8719 panel (FocalTech). Normal boot never reads this file.
++#
++# The driver is a module, and the controller has no flash: it needs its
++# firmware pushed by the host. The driver only learns the firmware file
++# name when something writes it to doreflash; in Android that's
++# /vendor/bin/init.mmi.touch.sh, which recovery doesn't have. doha has
++# one FocalTech panel and one firmware file for it, in recovery's
++# /vendor/firmware (device.mk).
++#
++# On units with the Himax panel the FocalTech device tree node is
++# disabled, so the module doesn't bind, and the Himax driver (built in)
++# has no doreflash: the write just fails.
 +on init
 +    exec u:r:modprobe:s0 -- /system/bin/modprobe -a -d /lib/modules focaltech_0flash_mmi_doha
++    wait /sys/devices/platform/soc/4a88000.spi/spi_master/spi0/spi0.0/doreflash 2
++    write /sys/devices/platform/soc/4a88000.spi/spi_master/spi0/spi0.0/doreflash focaltech-ft8719-a0-0000-doha.bin
