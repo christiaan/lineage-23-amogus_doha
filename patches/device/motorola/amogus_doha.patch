@@ -1,8 +1,8 @@
 diff --git a/BoardConfig.mk b/BoardConfig.mk
-index 9e00b92..b617293 100644
+index 9e00b92..d47c6c5 100644
 --- a/BoardConfig.mk
 +++ b/BoardConfig.mk
-@@ -31,6 +31,24 @@ ifneq ($(TARGET_PREBUILT_KERNEL),)
+@@ -31,6 +31,33 @@ ifneq ($(TARGET_PREBUILT_KERNEL),)
        $(wildcard device/motorola/amogus-kernel/modules/*.ko)
  endif
  
@@ -24,6 +24,45 @@ index 9e00b92..b617293 100644
 +    focaltech_0flash_mmi_doha \
 +    nova_0flash_mmi
 +
++# Touch in recovery (doha_android#49). Recovery has no /vendor, so the
++# FocalTech driver (Tianma FT8719 panel) must be in the ramdisk. Since
++# recovery is the boot ramdisk here, a non-empty modules.load in it would
++# also load the driver in first-stage init on every normal boot, before
++# its firmware is reachable. So the load list stays empty and
++# recovery/root/system/etc/init/touch_doha.rc loads it in recovery only.
++# The Himax driver is built in and only needs its firmware (device.mk).
++RECOVERY_KERNEL_MODULES := focaltech_0flash_mmi_doha.ko
++
  # Partitions
  BOARD_VENDORIMAGE_PARTITION_SIZE := 620756992
  BOARD_SYSTEMIMAGE_PARTITION_SIZE := 3238002688
+diff --git a/device.mk b/device.mk
+index 9051022..c936ec2 100644
+--- a/device.mk
++++ b/device.mk
+@@ -44,4 +44,12 @@ PRODUCT_BUILD_PROP_OVERRIDES += \
+     BuildDesc="doha_retail-user 10 QPIS30.28-Q3-28-26-4-1-3 f0a9a release-keys" \
+     BuildFingerprint=motorola/doha_retail/doha:10/QPIS30.28-Q3-28-26-4-1-3/f0a9a:user/release-keys
+ 
++# Touch firmware for recovery (doha_android#49). Both doha touch
++# controllers have no flash and get their firmware from the host, but
++# recovery doesn't mount /vendor, and amogus' device-recovery.mk only
++# covers rav and sofia. Tianma FT8719 (FocalTech) and DS HX83112A (Himax).
++PRODUCT_COPY_FILES += \
++    vendor/motorola/amogus_doha/proprietary/vendor/firmware/focaltech-ft8719-a0-0000-doha.bin:$(TARGET_COPY_OUT_RECOVERY)/root/vendor/firmware/focaltech-ft8719-a0-0000-doha.bin \
++    vendor/motorola/amogus_doha/proprietary/vendor/firmware/ds_Himax_firmware.bin:$(TARGET_COPY_OUT_RECOVERY)/root/vendor/firmware/ds_Himax_firmware.bin
++
+ $(call inherit-product-if-exists, vendor/motorola/amogus_doha/amogus_doha-vendor.mk)
+diff --git a/recovery/root/system/etc/init/touch_doha.rc b/recovery/root/system/etc/init/touch_doha.rc
+new file mode 100644
+index 0000000..218611a
+--- /dev/null
++++ b/recovery/root/system/etc/init/touch_doha.rc
+@@ -0,0 +1,7 @@
++# Recovery only (doha_android#49): load the FocalTech touch driver for
++# units with the Tianma FT8719 panel. Its firmware comes from
++# /vendor/firmware in the recovery ramdisk (device.mk). On units with
++# the Himax panel the device tree node is disabled, so the driver loads
++# but doesn't bind. Normal boot never reads this file.
++on init
++    exec u:r:modprobe:s0 -- /system/bin/modprobe -a -d /lib/modules focaltech_0flash_mmi_doha
