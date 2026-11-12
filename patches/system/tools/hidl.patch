@@ -1,0 +1,13 @@
+diff --git a/build/hidl_interface.go b/build/hidl_interface.go
+index b517e843..575353b6 100644
+--- a/build/hidl_interface.go
++++ b/build/hidl_interface.go
+@@ -898,6 +898,8 @@ var allAospHidlInterfaces = map[string]bool{
+ 	"android.frameworks.cameraservice.service@2.0": true,
+ 	"android.frameworks.cameraservice.service@2.1": true,
+ 	"android.frameworks.cameraservice.service@2.2": true,
++	// doha: restored for its camera HAL blob (frameworks/hardware/interfaces patch).
++	"android.frameworks.displayservice@1.0":       true,
+ 	"android.frameworks.sensorservice@1.0":         true,
+ 	"android.frameworks.stats@1.0":                 true,
+ 	"android.frameworks.vr.composer@1.0":           true,
