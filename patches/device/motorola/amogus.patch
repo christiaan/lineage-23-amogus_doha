@@ -25,6 +25,20 @@ index 1a6f520..7ff828b 100644
  
  include $(CLEAR_VARS)
  LOCAL_MODULE := amogus_folders
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index d7cdd2b..3468008 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -27,6 +27,9 @@ TARGET_2ND_CPU_VARIANT_RUNTIME := cortex-a53
+ 
+ # Kernel
+ BOARD_KERNEL_CMDLINE += androidboot.usbcontroller=4e00000.dwc3
++# Android 17 first-stage init only links /dev/block/by-name/* for the boot
++# device, and the bootloader passes only the legacy androidboot.bootdevice.
++BOARD_KERNEL_CMDLINE += androidboot.boot_devices=soc/4744000.sdhci
+ 
+ # SELinux
+ BOARD_USE_ENFORCING_SELINUX := true
 diff --git a/device.mk b/device.mk
 index 9caa77f..6a57fdb 100644
 --- a/device.mk
@@ -62,6 +76,19 @@ index 52c0155..32abba9 100644
  vendor/lib64/libqsocket.so
  vendor/lib64/libril-qc-hal-qmi.so
  vendor/lib64/libril-qc-logger.so
+diff --git a/rootdir/fstab.qcom b/rootdir/fstab.qcom
+index 269265a..2760bcf 100644
+--- a/rootdir/fstab.qcom
++++ b/rootdir/fstab.qcom
+@@ -6,7 +6,7 @@
+ # Currently we dont have e2fsck compiled. So fs check would failed.
+ 
+ #<src>                                                 <mnt_point>               <type>  <mnt_flags and options>                            <fs_mgr_flags>
+-/dev/block/by-name/system                               /                        erofs    ro                                 wait,slotselect,first_stage_mount
++/dev/block/by-name/system                               /system                  erofs    ro                                 wait,slotselect,first_stage_mount
+ /dev/block/by-name/vendor                               /vendor                  erofs    ro                                 wait,slotselect,first_stage_mount
+ /dev/block/bootdevice/by-name/userdata                  /data                    f2fs    rw,discard,nosuid,nodev,noatime,nodiratime,quota,nobarrier,reserve_root=32768,resgid=1065   latemount,wait,check,formattable,quota,reservedsize=128M
+ /devices/platform/soc/4784000.sdhci/mmc_host*           auto                     auto    defaults                                             wait,voldmanaged=sdcard1:auto
 diff --git a/sepolicy/file.te b/sepolicy/file.te
 index 4e0bc64..20473d5 100644
 --- a/sepolicy/file.te
