@@ -11,19 +11,6 @@ index e69df8d..8089679 100644
 +        "hardware/google/pixel/usb",
      ],
  }
-diff --git a/common-treble.mk b/common-treble.mk
-index bb3caa7..f036ecf 100644
---- a/common-treble.mk
-+++ b/common-treble.mk
-@@ -38,7 +38,7 @@ PRODUCT_PACKAGES += \
-     android.hardware.camera.provider@2.5.vendor \
-     android.hardware.camera.provider@2.6.vendor \
-     android.hardware.camera.provider@2.7.vendor \
--    android.frameworks.displayservice@1.0.vendor \
-+    lineage.frameworks.displayservice@1.0.vendor \
-     android.frameworks.sensorservice@1.0.vendor
- 
- # Configstore
 diff --git a/common.mk b/common.mk
 index 7207c9e..e36f9c5 100644
 --- a/common.mk
@@ -119,14 +106,13 @@ index 4af13b7..7fe2a12 100644
      if [ "$fps_id" == "chipone" ]
 diff --git a/sepolicy/private/hwservice_contexts b/sepolicy/private/hwservice_contexts
 new file mode 100644
-index 0000000..f3e0e4c
+index 0000000..2bc5b70
 --- /dev/null
 +++ b/sepolicy/private/hwservice_contexts
-@@ -0,0 +1,5 @@
+@@ -0,0 +1,4 @@
 +# Android 17 dropped android.frameworks.displayservice; LineageOS serves the
 +# same HIDL interface from SurfaceFlinger as lineage.frameworks.displayservice
-+# (surfaceflinger.register_displayservice), and doha's camera HAL is patched
-+# to use it.
++# (surfaceflinger.register_displayservice). Give it the old label.
 +lineage.frameworks.displayservice::IDisplayService u:object_r:fwk_display_hwservice:s0
 diff --git a/sepolicy/vendor/hwservice_contexts b/sepolicy/vendor/hwservice_contexts
 index afd4517..fc881cd 100644

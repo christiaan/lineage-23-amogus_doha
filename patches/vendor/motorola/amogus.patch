@@ -18,18 +18,3 @@ index 7e32a4e..336592c 100644
      vendor/motorola/amogus/proprietary/vendor/lib64/libqsocket.so:$(TARGET_COPY_OUT_VENDOR)/lib64/libqsocket.so \
      vendor/motorola/amogus/proprietary/vendor/lib64/libqtigef.so:$(TARGET_COPY_OUT_VENDOR)/lib64/libqtigef.so \
      vendor/motorola/amogus/proprietary/vendor/lib64/librcc.so:$(TARGET_COPY_OUT_VENDOR)/lib64/librcc.so \
-diff --git a/proprietary/vendor/lib/hw/camera.trinket.so b/proprietary/vendor/lib/hw/camera.trinket.so
-index c68e21e43b1be919d983ba2ac006638d4857ca8f..d298864af7bd42bd6a874db4f6592745cf7d9ce7 100644
-GIT binary patch
-delta 280
-zcmbQSAb!Sz_=Xn77N!>F7M2#)7Pc1l7LFFq7OocV7M>Q~7QPn#7J(MQ7NIS|%Qv&<
-zWagzNrl(GK*eYx^{lR8oM^urhEy5nCBDc2)$03W9AajhSzuhVvjw({SP1px6a$%dW
-zKQhO7dgOLt8Mp}06^7H-ZWrc(iyYW4Tnpy_rIn_q?GR4I5D{o+*(nUfB0wy<on@z3
-Pnh{LR_QKa<%bx%MR0?XH
-
-delta 271
-zcmbQSAb!Sz_=Xn77N!>F7M2#)7Pc1l7LFFq7OocV7M>Q~7QPn#7J(MQ7NIS|%Qv$p
-z=A{(nXQoVd*eYx^{lR8o$LS8cgxMk7s4c=Cs0wax5spI^DM98KO@F&pIDGoP{V@Ht
-z+k}0l`|Sa8FKiR`hbskgjHgF#7nXsG04+D1zIMAX4_xHHcHvq$2PmyHJ#B|@Du#$a
-cJIhXCAQk~)(d{fd#nOymYPJ`?7F+%V03#7-6#xJL
-
