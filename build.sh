@@ -200,7 +200,6 @@ set +eu
 source build/envsetup.sh
 breakfast "$DEVICE" userdebug || exit 1
 mka -j"$JOBS" target-files-package bacon || exit 1
-version=$(get_build_var LINEAGE_VERSION) || exit 1
 set -eu
 
 if [ -z "${ADB_KEY:-}" ]; then
@@ -214,7 +213,14 @@ fi
 # newest build. Keep a real copy of each build, with its images.
 images=$product/obj/PACKAGING/target_files_intermediates/lineage_$DEVICE-target_files/IMAGES
 dest=${ZIP_DIR:-$(dirname "$SRC")/zips}
-built=lineage-$version
+# Take the name from the dated zip that bacon linked to the -ota.zip.
+# Asking get_build_var for LINEAGE_VERSION here gives today's date, which
+# is wrong when the build ran past midnight UTC (doha_android#55). /e/'s
+# vendor/lineage names the zip e-<version>.zip instead of lineage-<version>.zip.
+ota=$product/lineage_$DEVICE-ota.zip
+zip=$(find "$product" -maxdepth 1 -name '*.zip' ! -name "${ota##*/}" -samefile "$ota" | head -1)
+[ -n "$zip" ] || { echo "No dated zip hard-linked to $ota" >&2; exit 1; }
+built=$(basename "$zip" .zip)
 name=$built${ADB_KEY:+-adbkey}
 mkdir -p "$dest"
 cp "$product/$built.zip" "$dest/$name.zip"
