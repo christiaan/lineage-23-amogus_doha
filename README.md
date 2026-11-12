@@ -43,7 +43,10 @@ several years of upstream security and stability fixes. `uname -r` shows
   `build.sh` patches, and move out folders that no project in
   `default.xml` covers (`repo list -p` lists the projects). Our first
   build from a copied tree picked up another device's LatinIME change
-  this way.
+  this way. A plain checkout that no device has touched avoids that: we
+  keep one in `~/android/base/lineage-23.2` (`repo init -u
+  https://github.com/LineageOS/android.git -b lineage-23.2`, then `repo
+  sync`) and copy it for each new tree.
 - **32 GB RAM plus at least 32 GB swap.** Soong's analysis step peaks around
   20 GB. With 28 GB RAM and 8 GB swap it was OOM-killed.
 - A fast internet connection. The first sync downloads about 100 GB of
@@ -54,20 +57,20 @@ several years of upstream security and stability fixes. `uname -r` shows
 ## Building
 
 ```sh
-git clone http://192.168.1.18:3000/claude/lineage-23.2-amogus_doha.git doha-lineage
-mkdir -p ~/doha/src ~/doha/ccache ~/doha/zips
+git clone https://github.com/christiaan/lineage-23-amogus_doha.git doha-lineage
+mkdir -p ~/android/doha-23.2 ~/android/ccache/doha ~/doha/zips
 
 docker run --rm -it \
   --user "$(id -u):$(id -g)" -e HOME=/tmp \
   -v "$PWD/doha-lineage:/manifest:ro" \
-  -v ~/doha/src:/src \
-  -v ~/doha/ccache:/ccache -e CCACHE_DIR=/ccache \
+  -v ~/android/doha-23.2:/src \
+  -v ~/android/ccache/doha:/ccache -e CCACHE_DIR=/ccache \
   -v ~/doha/zips:/zips -e ZIP_DIR=/zips \
   --entrypoint /manifest/build.sh \
   lineageos4microg/docker-lineage-cicd:latest /src
 ```
 
-Without Docker, run `./build.sh ~/doha/src` from the clone.
+Without Docker, run `./build.sh ~/android/doha-23.2` from the clone.
 
 `build.sh` does the following:
 
@@ -112,6 +115,25 @@ reports throttling (the default is 40). With Docker, pass these as
 The build is `userdebug`, unsigned (it uses the AOSP test keys) and has no
 GApps.
 
+### Test builds with your adb key
+
+For a test phone you can bake your own adb public key into the build, so
+adb works in recovery and in Android right after a wipe, with no
+"Allow USB debugging?" dialog:
+
+```sh
+  -v ~/.android/adbkey.pub:/adbkey.pub:ro -e ADB_KEY=/adbkey.pub \
+```
+
+Recovery and the system trust only that key (`ro.adb.secure` stays on),
+and USB debugging is on by default. Switching from a build without the key needs a
+data wipe: if `/data` was set up with USB debugging off, Android 16's
+trade-in mode takes over adb until the setup wizard is done, and only
+`adb shell tradeinmode ...` works. The output gets an `-adbkey` suffix.
+Don't share such a build: whoever holds the matching private key gets
+adb on every phone that runs it. A later build without `ADB_KEY` removes
+the key from `out/` again.
+
 ## Installing
 
 You need an unlocked bootloader. The phone is A/B, and the recovery is
@@ -142,8 +164,9 @@ Things you should know:
 - **Recovery installs to the inactive slot** and then switches to it. If
   one slot holds a known-good ROM you want to keep, make that slot the
   active one before you sideload (`fastboot --set-active=<slot>`).
-- During the sideload, the transfer slows down a lot at around 47%.
-  Tapping the phone's screen speeds it up again.
+- During the sideload, the progress on the computer stops at around 47%
+  while the phone installs the package. `adb` may then exit with
+  `adb: failed to read command: Success`; that is harmless.
 - `adb sideload` doesn't exit until you answer the additional-zip prompt
   from step 3 (not with `sideload-auto-reboot`, which has no prompt).
 - When you flash `vbmeta`, the bootloader prints
