@@ -74,6 +74,30 @@ index 9b57548b54..2535e00d62 100644
      }
  
      unique_fd cg_fd(open(cg2_path, O_DIRECTORY | O_RDONLY | O_CLOEXEC));
+diff --git a/bpf/progs/netd.c b/bpf/progs/netd.c
+index e4cd7c93b4..83454bd589 100644
+--- a/bpf/progs/netd.c
++++ b/bpf/progs/netd.c
+@@ -1026,7 +1026,8 @@ return bpf_traffic_account(skb, INGRESS, KVER_4_19, API(T));
+ }
+ 
+ // Android T 4.9 & T/U 4.14
+-DEFINE_NETD_BPF_PROG_RANGES(ingress, stats, 4_9, 4_19, T, V)
++// doha: 4.14 has no other stats program on 26Q2+, and netd aborts without it.
++DEFINE_NETD_BPF_PROG_RANGES(ingress, stats, 4_9, 4_19, T, MAXAPI)
+ (struct __sk_buff* skb) {
+     return bpf_traffic_account(skb, INGRESS, KVER_4_9, API(T));
+ }
+@@ -1082,7 +1083,8 @@ return bpf_traffic_account(skb, EGRESS, KVER_4_19, API(T));
+ }
+ 
+ // Android T 4.9 & T/U 4.14
+-DEFINE_NETD_BPF_PROG_RANGES(egress, stats, 4_9, 4_19, T, V)
++// doha: 4.14 has no other stats program on 26Q2+, and netd aborts without it.
++DEFINE_NETD_BPF_PROG_RANGES(egress, stats, 4_9, 4_19, T, MAXAPI)
+ (struct __sk_buff* skb) {
+     return bpf_traffic_account(skb, EGRESS, KVER_4_9, API(T));
+ }
 diff --git a/service/src/com/android/server/BpfNetMaps.java b/service/src/com/android/server/BpfNetMaps.java
 index c1a47997af..5d82237398 100644
 --- a/service/src/com/android/server/BpfNetMaps.java
