@@ -26,7 +26,7 @@ index 1a6f520..7ff828b 100644
  include $(CLEAR_VARS)
  LOCAL_MODULE := amogus_folders
 diff --git a/BoardConfig.mk b/BoardConfig.mk
-index d7cdd2b..7e4c3fe 100644
+index d7cdd2b..817fca4 100644
 --- a/BoardConfig.mk
 +++ b/BoardConfig.mk
 @@ -27,10 +27,14 @@ TARGET_2ND_CPU_VARIANT_RUNTIME := cortex-a53
@@ -44,6 +44,16 @@ index d7cdd2b..7e4c3fe 100644
  
  # Partition information
  TARGET_COPY_OUT_VENDOR := vendor
+@@ -38,6 +42,9 @@ BOARD_BOOTIMAGE_PARTITION_SIZE := 67108864
+ BOARD_EROFS_PCLUSTER_SIZE := 262144
+ BOARD_RECOVERYIMAGE_PARTITION_SIZE := $(BOARD_BOOTIMAGE_PARTITION_SIZE)
+ BOARD_SYSTEMIMAGE_FILE_SYSTEM_TYPE := erofs
++# Android 17's aconfigd keeps its flag storage in /metadata/aconfig; without
++# it every flag lookup fails and system_server crashes.
++BOARD_USES_METADATA_PARTITION := true
+ BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := erofs
+ ifneq ($(TARGET_DEVICE),amogus_doha)
+   ## Build product image
 diff --git a/device.mk b/device.mk
 index 9caa77f..66c72b3 100644
 --- a/device.mk
@@ -98,18 +108,20 @@ index 52c0155..32abba9 100644
  vendor/lib64/libril-qc-hal-qmi.so
  vendor/lib64/libril-qc-logger.so
 diff --git a/rootdir/fstab.qcom b/rootdir/fstab.qcom
-index 269265a..2760bcf 100644
+index 269265a..71ec92c 100644
 --- a/rootdir/fstab.qcom
 +++ b/rootdir/fstab.qcom
-@@ -6,7 +6,7 @@
+@@ -6,8 +6,9 @@
  # Currently we dont have e2fsck compiled. So fs check would failed.
  
  #<src>                                                 <mnt_point>               <type>  <mnt_flags and options>                            <fs_mgr_flags>
 -/dev/block/by-name/system                               /                        erofs    ro                                 wait,slotselect,first_stage_mount
 +/dev/block/by-name/system                               /system                  erofs    ro                                 wait,slotselect,first_stage_mount
  /dev/block/by-name/vendor                               /vendor                  erofs    ro                                 wait,slotselect,first_stage_mount
++/dev/block/by-name/metadata                             /metadata                ext4    noatime,nosuid,nodev,discard                         wait,check,formattable,first_stage_mount
  /dev/block/bootdevice/by-name/userdata                  /data                    f2fs    rw,discard,nosuid,nodev,noatime,nodiratime,quota,nobarrier,reserve_root=32768,resgid=1065   latemount,wait,check,formattable,quota,reservedsize=128M
  /devices/platform/soc/4784000.sdhci/mmc_host*           auto                     auto    defaults                                             wait,voldmanaged=sdcard1:auto
+ /dev/block/bootdevice/by-name/modem                     /vendor/firmware_mnt     ext4    ro,nosuid,nodev,context=u:object_r:firmware_file:s0  wait,slotselect
 diff --git a/sepolicy/file.te b/sepolicy/file.te
 index 4e0bc64..20473d5 100644
 --- a/sepolicy/file.te
