@@ -26,10 +26,10 @@ index 1a6f520..7ff828b 100644
  include $(CLEAR_VARS)
  LOCAL_MODULE := amogus_folders
 diff --git a/BoardConfig.mk b/BoardConfig.mk
-index d7cdd2b..3468008 100644
+index d7cdd2b..7e4c3fe 100644
 --- a/BoardConfig.mk
 +++ b/BoardConfig.mk
-@@ -27,6 +27,9 @@ TARGET_2ND_CPU_VARIANT_RUNTIME := cortex-a53
+@@ -27,10 +27,14 @@ TARGET_2ND_CPU_VARIANT_RUNTIME := cortex-a53
  
  # Kernel
  BOARD_KERNEL_CMDLINE += androidboot.usbcontroller=4e00000.dwc3
@@ -39,8 +39,13 @@ index d7cdd2b..3468008 100644
  
  # SELinux
  BOARD_USE_ENFORCING_SELINUX := true
+ BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy
++include device/lineage/sepolicy/libion/sepolicy.mk
+ 
+ # Partition information
+ TARGET_COPY_OUT_VENDOR := vendor
 diff --git a/device.mk b/device.mk
-index 9caa77f..6a57fdb 100644
+index 9caa77f..66c72b3 100644
 --- a/device.mk
 +++ b/device.mk
 @@ -19,6 +19,12 @@ PLATFORM_COMMON_PATH := device/motorola/amogus
@@ -56,6 +61,22 @@ index 9caa77f..6a57fdb 100644
  AB_OTA_PARTITIONS += \
      boot \
      dtbo \
+@@ -74,6 +80,15 @@ TARGET_USES_FPC_FINGERPRINT := true
+ PRODUCT_PROPERTY_OVERRIDES += \
+     vendor.gatekeeper.disable_spu=true
+ 
++# Android 17 legacy paths (as LineageOS does for ginkgo, same SoC and
++# 4.14 kernel): libion's real implementation (AOSP made it no-ops, and
++# keymaster/gatekeeper abort with "Cannot open ION device" without it),
++# the gralloc 2/3 mapper (the vendor only serves mapper 3.0), and the
++# displayservice HIDL registration in SurfaceFlinger.
++$(call soong_config_set_bool,libion,legacy_impl,true)
++$(call soong_config_set_bool,libui,legacy_gralloc,true)
++$(call soong_config_set_bool,surfaceflinger,register_displayservice,true)
++
+ # HIDL
+ PRODUCT_PACKAGES += \
+     android.hidl.base@1.0 \
 diff --git a/proprietary-files.txt b/proprietary-files.txt
 index 52c0155..32abba9 100644
 --- a/proprietary-files.txt
