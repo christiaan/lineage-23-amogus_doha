@@ -1,8 +1,8 @@
 diff --git a/BoardConfig.mk b/BoardConfig.mk
-index 9e00b92..1984ee5 100644
+index 9e00b92..a4ddff2 100644
 --- a/BoardConfig.mk
 +++ b/BoardConfig.mk
-@@ -31,6 +31,34 @@ ifneq ($(TARGET_PREBUILT_KERNEL),)
+@@ -31,9 +31,43 @@ ifneq ($(TARGET_PREBUILT_KERNEL),)
        $(wildcard device/motorola/amogus-kernel/modules/*.ko)
  endif
  
@@ -37,6 +37,15 @@ index 9e00b92..1984ee5 100644
  # Partitions
  BOARD_VENDORIMAGE_PARTITION_SIZE := 620756992
  BOARD_SYSTEMIMAGE_PARTITION_SIZE := 3238002688
++# ext4 system (doha_android#53): with a fixed partition size the build
++# doesn't size the inode table, and mke2fs' default (one per 16 KiB)
++# gives 194688 inodes for about 8100 used. 16384 keeps 2x headroom and
++# frees about 43 MB for GApps and addon.d restores. Too few inodes fails
++# the build ("Out of inodes?"), not the phone.
++BOARD_SYSTEMIMAGE_EXTFS_INODE_COUNT := 16384
+ BOARD_DTBOIMG_PARTITION_SIZE := 8388608
+ 
+ # Recovery
 diff --git a/device.mk b/device.mk
 index 9051022..ff772d6 100644
 --- a/device.mk
