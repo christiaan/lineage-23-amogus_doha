@@ -1,8 +1,8 @@
 diff --git a/BoardConfig.mk b/BoardConfig.mk
-index 9e00b92..b617293 100644
+index 9e00b92..1984ee5 100644
 --- a/BoardConfig.mk
 +++ b/BoardConfig.mk
-@@ -31,6 +31,24 @@ ifneq ($(TARGET_PREBUILT_KERNEL),)
+@@ -31,6 +31,34 @@ ifneq ($(TARGET_PREBUILT_KERNEL),)
        $(wildcard device/motorola/amogus-kernel/modules/*.ko)
  endif
  
@@ -24,11 +24,21 @@ index 9e00b92..b617293 100644
 +    focaltech_0flash_mmi_doha \
 +    nova_0flash_mmi
 +
++# Touch in recovery (doha_android#49). Recovery has no /vendor, so the
++# FocalTech driver (Tianma FT8719 panel) must be in the ramdisk. Since
++# recovery is the boot ramdisk here, a non-empty modules.load in it would
++# also load the driver in first-stage init on every normal boot, before
++# its firmware is reachable. So the load list stays empty and
++# recovery/root/system/etc/init/touch_doha.rc loads it in recovery only.
++# The Himax driver is built in and only needs its firmware (device.mk).
++RECOVERY_KERNEL_MODULES := focaltech_0flash_mmi_doha.ko
++BOARD_VENDOR_SEPOLICY_DIRS += device/motorola/amogus_doha/sepolicy/recovery
++
  # Partitions
  BOARD_VENDORIMAGE_PARTITION_SIZE := 620756992
  BOARD_SYSTEMIMAGE_PARTITION_SIZE := 3238002688
 diff --git a/device.mk b/device.mk
-index 9051022..3a6b5b6 100644
+index 9051022..47dfa99 100644
 --- a/device.mk
 +++ b/device.mk
 @@ -27,7 +27,8 @@ TARGET_USES_FINGERPRINT_V2_1 := true
@@ -41,6 +51,44 @@ index 9051022..3a6b5b6 100644
  
  # Partitions
  TARGET_USES_DYNAMIC_PARTITIONS := false
+@@ -44,4 +45,12 @@ PRODUCT_BUILD_PROP_OVERRIDES += \
+     BuildDesc="doha_retail-user 10 QPIS30.28-Q3-28-26-4-1-3 f0a9a release-keys" \
+     BuildFingerprint=motorola/doha_retail/doha:10/QPIS30.28-Q3-28-26-4-1-3/f0a9a:user/release-keys
+ 
++# Touch firmware for recovery (doha_android#49). Both doha touch
++# controllers have no flash and get their firmware from the host, but
++# recovery doesn't mount /vendor, and amogus' device-recovery.mk only
++# covers rav and sofia. Tianma FT8719 (FocalTech) and DS HX83112A (Himax).
++PRODUCT_COPY_FILES += \
++    vendor/motorola/amogus_doha/proprietary/vendor/firmware/focaltech-ft8719-a0-0000-doha.bin:$(TARGET_COPY_OUT_RECOVERY)/root/vendor/firmware/focaltech-ft8719-a0-0000-doha.bin \
++    vendor/motorola/amogus_doha/proprietary/vendor/firmware/ds_Himax_firmware.bin:$(TARGET_COPY_OUT_RECOVERY)/root/vendor/firmware/ds_Himax_firmware.bin
++
+ $(call inherit-product-if-exists, vendor/motorola/amogus_doha/amogus_doha-vendor.mk)
+diff --git a/recovery/root/system/etc/init/touch_doha.rc b/recovery/root/system/etc/init/touch_doha.rc
+new file mode 100644
+index 0000000..b8642da
+--- /dev/null
++++ b/recovery/root/system/etc/init/touch_doha.rc
+@@ -0,0 +1,19 @@
++# Recovery only (doha_android#49): touch for units with the Tianma
++# FT8719 panel (FocalTech). Normal boot never reads this file.
++#
++# The driver is a module, and the controller has no flash: it needs its
++# firmware pushed by the host. The driver only learns the firmware file
++# name when something writes it to doreflash; in Android that's
++# /vendor/bin/init.mmi.touch.sh, which recovery doesn't have. doha has
++# one FocalTech panel and one firmware file for it, in recovery's
++# /vendor/firmware (device.mk).
++# The driver drops the last character of what's written (it expects the
++# newline echo adds), hence the \n.
++#
++# On units with the Himax panel the FocalTech device tree node is
++# disabled, so the module doesn't bind, and the Himax driver (built in)
++# has no doreflash: the write just fails.
++on init
++    exec u:r:modprobe:s0 -- /system/bin/modprobe -a -d /lib/modules focaltech_0flash_mmi_doha
++    wait /sys/devices/platform/soc/4a88000.spi/spi_master/spi0/spi0.0/doreflash 2
++    write /sys/devices/platform/soc/4a88000.spi/spi_master/spi0/spi0.0/doreflash focaltech-ft8719-a0-0000-doha.bin\n
 diff --git a/rro_overlays/ApertureOverlays/Android.mk b/rro_overlays/ApertureOverlays/Android.mk
 new file mode 100644
 index 0000000..6361f9b
@@ -107,3 +155,15 @@ index 0000000..4947f89
 +        <item>2</item>
 +    </string-array>
 +</resources>
+diff --git a/sepolicy/recovery/init.te b/sepolicy/recovery/init.te
+new file mode 100644
+index 0000000..8971ac0
+--- /dev/null
++++ b/sepolicy/recovery/init.te
+@@ -0,0 +1,6 @@
++# Recovery only (doha_android#49): recovery/root/system/etc/init/touch_doha.rc
++# writes the FocalTech touch firmware name to the driver's doreflash node.
++# In Android, init.mmi.touch.sh (vendor_moto_init_shell) does this.
++recovery_only(`
++  allow init vendor_sysfs_touchpanel:file w_file_perms;
++')
