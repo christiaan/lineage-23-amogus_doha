@@ -1,0 +1,46 @@
+zygote_next: skip capabilities the kernel doesn't know
+
+Android 17's native zygote (zygote_next) drops every capability outside
+the requested bounding set, and first asks the kernel with
+PR_CAPBSET_READ whether each one is in the set. It walks all
+capabilities libcap knows, up to CAP_CHECKPOINT_RESTORE (40). Kernels
+before 5.8 stop at CAP_AUDIT_READ (37) and answer EINVAL for 38-40,
+and the .expect() turns that into a panic, so every child aborts.
+
+On doha (4.14) this kills every app zygote started through
+NativeZygoteProcess, which is how Chrome, Edge and other Chromium
+browsers start their renderers on Android 17: the browser UI runs but
+no page ever loads (doha_android#71).
+
+A capability the kernel doesn't know can't be in the bounding set, so
+treat EINVAL as "not in the set" and move on. Any other error still
+panics as before.
+---
+ zygote/src/child_process.rs | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/zygote/src/child_process.rs b/zygote/src/child_process.rs
+index f6ec741..122faba 100644
+--- a/zygote/src/child_process.rs
++++ b/zygote/src/child_process.rs
+@@ -83,7 +83,19 @@ pub(crate) fn re_initialize(
+     if let Some(cap_bound) = spawn_params.cap_bound {
+         for flag in cap_bound.complement().iter() {
+             let cap = Capability::try_from(flag.bits().trailing_zeros()).unwrap();
+-            if cap::cap_within_bound(cap).expect("Failed to check capability bound") {
++            // A kernel older than the capability (CAP_PERFMON, CAP_BPF and
++            // CAP_CHECKPOINT_RESTORE need 5.8/5.9) rejects PR_CAPBSET_READ
++            // with EINVAL. Such a capability can't be in the bounding set,
++            // so there's nothing to drop.
++            let within_bound = match cap::cap_within_bound(cap) {
++                Err(cap::CapabilityError::GetCapBoundFailure(errno))
++                    if errno as i32 == libc::EINVAL =>
++                {
++                    false
++                }
++                result => result.expect("Failed to check capability bound"),
++            };
++            if within_bound {
+                 cap::cap_drop_bound(cap).expect("Failed to drop capability bound");
+             }
+         }
