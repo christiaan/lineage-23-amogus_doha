@@ -1,20 +1,20 @@
-# LineageOS 23.2 for the Moto G8 Plus (amogus_doha)
+# LineageOS 24.0 for the Moto G8 Plus (amogus_doha)
 
-This repo has everything needed to rebuild our unofficial **LineageOS 23.2
-(Android 16)** ROM for the **Motorola Moto G8 Plus** (`doha`, XT2019-1/2,
+This repo has everything needed to rebuild our unofficial **LineageOS 24.0
+(Android 17)** ROM for the **Motorola Moto G8 Plus** (`doha`, XT2019-1/2,
 Snapdragon 665). In the source tree the device is called **`amogus_doha`**.
 
 The repo has three parts:
 
 | Path | What it is |
 | --- | --- |
-| `default.xml` | A `repo` manifest that pins all 1184 projects to the exact commits the released build used |
+| `default.xml` | A `repo` manifest that pins all 1264 projects to the exact commits the released build used |
 | `patches/` | Our fixes. `patches/<project path>.patch` applies to that project |
 | `build.sh` | Syncs the sources, applies the patches and builds the zip |
 
 The device tree and vendor blobs come from the community doha port by
 Aldair402 and moto-common. We didn't write those. Our work is the
-patches that get that port building and booting on LineageOS 23.2.
+patches that get that port building and booting on LineageOS 24.0.
 
 The kernel is our fork of Aldair402's
 ([`christiaan/android_kernel_motorola_msm-4.14`](https://github.com/christiaan/android_kernel_motorola_msm-4.14),
@@ -22,6 +22,9 @@ branch `lts`). Aldair402's kernel is Motorola's 4.14.190. Ours merges the
 4.14 LTS updates up to 4.14.357 (OpenELA) on top of it, so it carries
 several years of upstream security and stability fixes. `uname -r` shows
 `4.14.357-openela+`.
+
+The LineageOS 23.2 (Android 16) version of this ROM is on the `main`
+branch.
 
 ## Requirements
 
@@ -34,43 +37,44 @@ several years of upstream security and stability fixes. `uname -r` shows
 - **About 350 GB of free disk**: roughly 200 GB for the synced sources and
   120 GB for `out/`. ccache adds up to 50 GB more if you enable it.
   On btrfs (or XFS) you can save most of the source part by starting from
-  another LineageOS 23.2 checkout: `cp -a --reflink=always <that tree>
+  another LineageOS 24.0 checkout: `cp -a --reflink=always <that tree>
   <source dir>` shares its files and git history instead of copying
   them. Move its `.repo/local_manifests/*.xml` out of the copy first;
   `build.sh` then syncs it to this manifest and only downloads what
   differs. The sync doesn't remove the other tree's own changes, though:
   run `repo status` and revert or remove everything except the projects
   `build.sh` patches, and move out folders that no project in
-  `default.xml` covers (`repo list -p` lists the projects). Our first
-  build from a copied tree picked up another device's LatinIME change
-  this way. A plain checkout that no device has touched avoids that: we
-  keep one in `~/android/base/lineage-23.2` (`repo init -u
-  https://github.com/LineageOS/android.git -b lineage-23.2`, then `repo
+  `default.xml` covers (`repo list -p` lists the projects). A plain
+  checkout that no device has touched avoids that: we keep one in
+  `~/android/base/lineage-24.0` (`repo init -u
+  https://github.com/LineageOS/android.git -b lineage-24.0`, then `repo
   sync`) and copy it for each new tree.
-- **32 GB RAM plus at least 32 GB swap.** Soong's analysis step peaks around
-  20 GB. With 28 GB RAM and 8 GB swap it was OOM-killed.
+- **About 100 GB of memory, RAM plus swap.** Soong's analysis step for
+  LineageOS 24.0 needs far more than 23.2 did. We build with 30 GB RAM
+  and a 72 GB swap file; it works, but the analysis step is slow while
+  it swaps.
 - A fast internet connection. The first sync downloads about 100 GB of
   git history.
-- Time. A clean build (empty ccache) took 2 h 51 min on 16 threads with
-  30 GB RAM. With a warm ccache, a rebuild takes about 7 minutes.
+- Time. A rebuild with a warm ccache takes about 12 minutes; one that
+  follows a monthly LineageOS update about an hour.
 
 ## Building
 
 ```sh
-git clone https://github.com/christiaan/lineage-23-amogus_doha.git doha-lineage
-mkdir -p ~/android/doha-23.2 ~/android/ccache/doha ~/doha/zips
+git clone -b lineage-24.0 https://github.com/christiaan/lineage-23-amogus_doha.git doha-lineage
+mkdir -p ~/android/doha-24.0 ~/android/ccache/doha ~/doha/zips
 
 docker run --rm -it \
   --user "$(id -u):$(id -g)" -e HOME=/tmp \
   -v "$PWD/doha-lineage:/manifest:ro" \
-  -v ~/android/doha-23.2:/src \
+  -v ~/android/doha-24.0:/src \
   -v ~/android/ccache/doha:/ccache -e CCACHE_DIR=/ccache \
   -v ~/doha/zips:/zips -e ZIP_DIR=/zips \
   --entrypoint /manifest/build.sh \
   lineageos4microg/docker-lineage-cicd:latest /src
 ```
 
-Without Docker, run `./build.sh ~/android/doha-23.2` from the clone.
+Without Docker, run `./build.sh ~/android/doha-24.0` from the clone.
 
 `build.sh` does the following:
 
@@ -91,8 +95,8 @@ Without Docker, run `./build.sh ~/android/doha-23.2` from the clone.
    `~/doha/zips`, with a `.sha256sum` file.
 
 The output is
-`~/doha/zips/lineage-23.2-<date>-UNOFFICIAL-amogus_doha.zip`, next to
-`lineage-23.2-<date>-UNOFFICIAL-amogus_doha-{boot,dtbo,vbmeta}.img`. Use
+`~/doha/zips/lineage-24.0-<date>-UNOFFICIAL-amogus_doha.zip`, next to
+`lineage-24.0-<date>-UNOFFICIAL-amogus_doha-{boot,dtbo,vbmeta}.img`. Use
 these copies, not the zips in `out/target/product/amogus_doha/`: `bacon`
 hard-links the dated zip there to `lineage_amogus_doha-ota.zip`, and the
 next build rewrites that file in place, so every older zip in `out/` ends
@@ -113,7 +117,7 @@ reports throttling (the default is 40). With Docker, pass these as
 `-e NAME=value`.
 
 The build is `userdebug`, unsigned (it uses the AOSP test keys) and has no
-GApps.
+GApps; you can add them yourself (see Installing).
 
 ### Test builds with your adb key
 
@@ -127,7 +131,7 @@ adb works in recovery and in Android right after a wipe, with no
 
 Recovery and the system trust only that key (`ro.adb.secure` stays on),
 and USB debugging is on by default. Switching from a build without the key needs a
-data wipe: if `/data` was set up with USB debugging off, Android 16's
+data wipe: if `/data` was set up with USB debugging off, Android's
 trade-in mode takes over adb until the setup wizard is done, and only
 `adb shell tradeinmode ...` works. The output gets an `-adbkey` suffix.
 Don't share such a build: whoever holds the matching private key gets
@@ -140,12 +144,16 @@ You need an unlocked bootloader. The phone is A/B, and the recovery is
 inside `boot`.
 
 1. `fastboot flash boot <boot.img>`. This is only needed when you're
-   coming from stock or a different ROM.
-2. Boot into recovery. Do a factory reset when coming from another ROM.
-   Then choose **Apply update → Apply from ADB** and run
-   `adb sideload lineage-23.2-*.zip`.
-3. When the install finishes, recovery asks whether you want to install an
-   additional zip. Choose **No**, then **Reboot system now**.
+   coming from stock or a different ROM, including LineageOS 23.2 of
+   this ROM.
+2. Boot into recovery. Do a factory reset (**Factory reset → Format
+   data**) when coming from another ROM or from LineageOS 23.2. Then
+   choose **Apply update → Apply from ADB** and run
+   `adb sideload lineage-24.0-*.zip`.
+3. When the install finishes, recovery asks whether you want to install
+   additional packages. To add Google apps, answer **Yes** (recovery
+   restarts on the new slot) and follow [Google apps](#google-apps).
+   Otherwise choose **No**, then **Reboot system now**.
 
 To update a phone that already runs this ROM, without touching it: turn
 on USB debugging, authorize the computer, and run
@@ -153,11 +161,32 @@ on USB debugging, authorize the computer, and run
 ```sh
 adb reboot sideload-auto-reboot
 adb wait-for-sideload
-adb sideload lineage-23.2-*.zip
+adb sideload lineage-24.0-*.zip
 ```
 
 With `sideload-auto-reboot`, recovery skips the additional-zip prompt
 and reboots into the new build by itself when the install is done.
+**This removes Google apps** (see below); don't use it if you have them.
+
+### Google apps
+
+The system partition is ext4, so add-on packages can be installed from
+recovery. We tested
+[MindTheGapps](https://github.com/MindTheGapps/17.0.0-arm64/releases)
+17.0.0 arm64 (20261022): the full package fits, with about 70 MB to
+spare.
+
+- Install it right after the ROM, before the first boot: answer **Yes**
+  to the additional-packages prompt (or choose **Advanced → Reboot to
+  recovery**), then **Apply update → Apply from ADB**, run `adb sideload
+  MindTheGapps-17.0.0-arm64-*.zip`, and confirm **Yes** when recovery
+  warns that the signature can't be verified.
+- Adding GApps to a phone that has already booted without them needs a
+  factory reset afterwards.
+- **Every update sideloaded from recovery removes them**, because only
+  updates from the Updater app keep add-ons, and this ROM has no update
+  server. Sideload MindTheGapps again right after each ROM update, in
+  the same recovery session, before booting.
 
 Things you should know:
 
@@ -175,19 +204,16 @@ Things you should know:
 
 ## Status
 
-Tested on real hardware, and working: boot, mobile calls and data (SIM),
-Wi-Fi (including WPA3-SAE), Bluetooth (HID devices and A2DP audio to a
-speaker), NFC tag reading, GPS, fingerprint (FPC), vibration, camera, audio,
-charging, VoLTE calls (4G calling, tested with a simyo SIM on KPN), and
-starting the Wi-Fi hotspot and USB tethering.
+LineageOS 24.0 for doha is new. Tested on real hardware (an XT2019-1
+with the Tianma FocalTech touch panel and the FPC fingerprint sensor):
+boot, touch (in Android and in recovery), all four cameras including
+the ultra-wide, recovery installs, and MindTheGapps with the Google
+setup wizard. Wi-Fi, Bluetooth, NFC, the sensors, GNSS and the
+fingerprint service start, but haven't been tried by hand.
 
-Touch is tested on a unit with the Himax panel. Since 1.0.1 the
-FocalTech and Novatek touch drivers load at boot too, for units with
-those panels; they haven't been tested on such a unit yet.
-
-Not verified yet: Bluetooth headset call audio (HFP); traffic from a
-tethered device through mobile data (hotspot and USB tethering were tested
-with mobile data off); 464XLAT on IPv6-only mobile networks.
+Not tested on 24.0 yet: calls, SMS and mobile data (VoLTE worked on
+23.2), audio playback, Bluetooth audio, fingerprint enrolment, the
+Himax and Novatek touch panels, and the Egistec fingerprint sensor.
 
 ## Differences from an official LineageOS device
 
@@ -206,20 +232,58 @@ it differs in these ways:
   (`--flags 2`). Official devices turn verity off for system too, but
   should keep it on for vendor.
 - **No LiveDisplay colour adjustment.**
-- **Recovery touch doesn't work** (use the volume and power keys).
+- **Kernel 4.14 on Android 17.** Android 17 expects at least 5.10. A few
+  features that need a newer kernel are turned off instead of crashing
+  the system (see [LineageOS 24.0](#lineageos-240)).
 - **Hardware variants**: the build supports every Moto G8 Plus, but only
-  a unit with the Himax touch panel and the FPC fingerprint sensor has
-  been tested. FocalTech and Novatek touch panels, the Egistec
-  fingerprint sensor, and the units without NFC or the ToF sensor are
-  untested.
+  some combinations have been tested (see Status).
 
 ---
 
 ## The fixes, and why each one is needed
 
-Most of these problems come from pairing an Android 16 base with a device
-that launched on Android 10 with a 4.14 kernel. The shared Qualcomm trees
-also assume newer chips. Each section names the patch it lives in.
+Most of these problems come from pairing a recent Android base with a
+device that launched on Android 10 with a 4.14 kernel. The shared
+Qualcomm trees also assume newer chips. Each section names the patch it
+lives in. The 23.2 fixes below all carry over; LineageOS 24.0 needed the
+extra ones in the next section.
+
+### LineageOS 24.0
+
+- **Boot through the ramdisk.** Android 17's init no longer boots doha's
+  legacy system-as-root layout. The kernel now unpacks the boot ramdisk
+  despite the bootloader's `skip_initramfs` and tells init to boot
+  Android (`CONFIG_INITRAMFS_IGNORE_SKIP_FLAG`,
+  `CONFIG_PROC_CMDLINE_APPEND_ANDROID_FORCE_NORMAL_BOOT`, ported from
+  LineageOS's ginkgo kernel). First-stage init then needs
+  `androidboot.boot_devices` on the command line and mounts system at
+  `/system`, and it mounts `/metadata` for Android 17's flag storage.
+  (`kernel/motorola/msm-4.14.patch`, `device/motorola/amogus.patch`,
+  `device/motorola/amogus_doha.patch`)
+- **Legacy HAL paths.** Keymaster and gatekeeper need `libion`'s legacy
+  implementation, plus the legacy gralloc and display-service paths
+  that LineageOS's other 24.0 devices of this age use.
+- **BPF on 4.14.** healthd's power-supply filter and netd's traffic
+  programs get their kernel limits back so 4.14 loads (or skips) them,
+  and system_server no longer aborts when the kernel has no BPF ring
+  buffers (local-network and loopback events, kernel 5.8+, are off).
+  (`packages/modules/Connectivity.patch` and others)
+- **Camera.** The camera HAL links
+  `android.frameworks.displayservice@1.0`, which Android 17 removed; the
+  interface is restored as a library (`frameworks/hardware/interfaces.patch`,
+  `system/tools/hidl.patch`). Nothing serves it, so the HAL gets no
+  display events; capture works.
+- **ext4 system, sized for GApps.** System is ext4 instead of erofs so
+  add-on packages can install, with 16384 inodes instead of mke2fs'
+  default 194688 to leave room (`device/motorola/amogus.patch`,
+  `device/motorola/amogus_doha.patch`).
+- **Recovery touch.** 24.0's build no longer copies the device's
+  `recovery/root` into recovery, so the script that loads the touch
+  module is installed explicitly (`device/motorola/amogus_doha.patch`).
+- **Build fixes.** The kernel is built with LLVM only, so 4.14 gets
+  `CROSS_COMPILE` back; BoringSSL without the ENGINE API needs guards in
+  the kernel's signing tools; the VINTF manifest moves to target level 7;
+  Pixel's moved power and USB HAL namespaces are imported.
 
 ### Needed to get the build working
 
