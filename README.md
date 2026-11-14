@@ -143,9 +143,12 @@ the key from `out/` again.
 You need an unlocked bootloader. The phone is A/B, and the recovery is
 inside `boot`.
 
-1. `fastboot flash boot <boot.img>`. This is only needed when you're
-   coming from stock or a different ROM, including LineageOS 23.2 of
-   this ROM.
+1. `fastboot flash boot <boot.img>` and `fastboot flash dtbo
+   <dtbo.img>`. This is only needed when you're coming from stock or a
+   different ROM, including LineageOS 23.2 of this ROM. Recovery runs
+   with the dtbo of the current slot, and with stock's, the touchscreen
+   doesn't work in recovery on phones with the Tianma (FocalTech) panel.
+   The volume keys and the power button work either way.
 2. Boot into recovery. Do a factory reset (**Factory reset → Format
    data**) when coming from another ROM or from LineageOS 23.2. Then
    choose **Apply update → Apply from ADB** and run
