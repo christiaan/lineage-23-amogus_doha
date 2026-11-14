@@ -182,3 +182,16 @@ index 0000000..8971ac0
 +recovery_only(`
 +  allow init vendor_sysfs_touchpanel:file w_file_perms;
 +')
+diff --git a/props/build_doha.prop b/props/build_doha.prop
+--- a/props/build_doha.prop
++++ b/props/build_doha.prop
+@@ -18,3 +18,9 @@
+ 
+ # Wfd
+ persist.debug.wfd.enable=1
++
++# Radio: start Motorola's MBN loader in QCRIL, as stock does. It loads
++# the carrier MBNs from /vendor/fsg into the modem; without it a modem
++# whose EFS holds no MBN never gets a carrier config (Forgejo #61).
++persist.vendor.radio.start_ota_daemon=1
++persist.vendor.radio.sw_mbn_update=0
