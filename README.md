@@ -205,6 +205,35 @@ Things you should know:
   `WARNING: vbmeta_a anti rollback downgrade, 0 vs 15`. That's expected
   on an unlocked doha, and the flash still goes through.
 
+### Root with Magisk
+
+Magisk 31.1 works with this build. Patch the release's boot image in the
+Magisk app and flash it:
+
+1. Install the Magisk app (31.1 or newer) from
+   [its GitHub releases](https://github.com/topjohnwu/Magisk/releases).
+2. Copy `lineage-24.0-*-boot.img` from the release you have installed
+   to the phone. In Magisk, tap **Install**, choose **Patch firmware /
+   image** and select that file. The app saves
+   `magisk_patched-*.img` in Downloads.
+3. Copy the patched image to your computer and flash it to the active
+   slot:
+   ```sh
+   adb reboot bootloader
+   fastboot flash boot magisk_patched-*.img
+   fastboot reboot
+   ```
+   To try it first without flashing, use `fastboot boot
+   magisk_patched-*.img` instead; the next reboot is back to the
+   unrooted boot image.
+4. Open Magisk. If it asks for additional setup, tap **OK**; the phone
+   reboots.
+
+Since Magisk 31.1 there is no root prompt: an app (or **Shell**, for
+`adb shell su`) only gets root after you grant it in Magisk's
+**Superuser** tab. Each ROM update replaces the boot image and removes
+Magisk, so patch and flash the new release's boot image after updating.
+
 ## Status
 
 Tested on real hardware (an XT2019-1 with the Tianma FocalTech touch
@@ -219,6 +248,7 @@ panel and the FPC fingerprint sensor):
   Bluetooth speaker.
 - MindTheGapps with the Google setup wizard, Google sign-in and the
   Play Store, and Chromium-based browsers.
+- Root with Magisk 31.1, from a boot image patched in the Magisk app.
 
 NFC, the sensors and GNSS start but haven't been tried by hand. Not
 tested: the Himax and Novatek touch panels, the Egistec fingerprint
