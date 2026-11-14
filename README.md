@@ -207,16 +207,32 @@ Things you should know:
 
 ## Status
 
-LineageOS 24.0 for doha is new. Tested on real hardware (an XT2019-1
-with the Tianma FocalTech touch panel and the FPC fingerprint sensor):
-boot, touch (in Android and in recovery), all four cameras including
-the ultra-wide, recovery installs, and MindTheGapps with the Google
-setup wizard. Wi-Fi, Bluetooth, NFC, the sensors, GNSS and the
-fingerprint service start, but haven't been tried by hand.
+Tested on real hardware (an XT2019-1 with the Tianma FocalTech touch
+panel and the FPC fingerprint sensor):
 
-Not tested on 24.0 yet: calls, SMS and mobile data (VoLTE worked on
-23.2), audio playback, Bluetooth audio, fingerprint enrolment, the
-Himax and Novatek touch panels, and the Egistec fingerprint sensor.
+- A clean install from stock firmware (4-1-7) following the steps above,
+  and updates sideloaded over an earlier 24.0 build.
+- Boot, touch (in Android and in recovery), all four cameras including
+  the ultra-wide, fingerprint enrolment and unlock.
+- Calls with audio both ways, SMS and mobile data (on two Dutch
+  carriers), Wi-Fi, audio on the speaker, wired headphones and a
+  Bluetooth speaker.
+- MindTheGapps with the Google setup wizard, Google sign-in and the
+  Play Store, and Chromium-based browsers.
+
+NFC, the sensors and GNSS start but haven't been tried by hand. Not
+tested: the Himax and Novatek touch panels, the Egistec fingerprint
+sensor and the dual-SIM XT2019-2.
+
+Known issues:
+
+- **VoLTE depends on the modem's carrier profile.** The modem picks one
+  of Motorola's carrier profiles by SIM. For carriers Motorola has no
+  profile for (for example SIMs on KPN's network in the Netherlands) it
+  falls back to a generic profile with IMS off, so calls go over 2G/3G.
+  Stock firmware does the same. Being investigated.
+- After a fresh install from stock, the first boot may find only 2G.
+  One more reboot fixes it.
 
 ## Differences from an official LineageOS device
 
