@@ -113,11 +113,30 @@ ccache limit (the default is `50G`). `ZIP_DIR=<dir>` changes where builds
 are copied (the default is `zips/` next to the source directory).
 `MANIFEST_BRANCH=<branch>` syncs a different branch of the manifest.
 `SKIN_THROTTLE_C=<°C>` sets the skin temperature at which the thermal HAL
-reports throttling (the default is 40). With Docker, pass these as
-`-e NAME=value`.
+reports throttling (the default is 40). `UPDATER_URI=<https URL>` sets the
+OTA feed the Updater app checks (see [Publishing an update](#publishing-an-update)).
+With Docker, pass these as `-e NAME=value`.
 
 The build is `userdebug`, unsigned (it uses the AOSP test keys) and has no
 GApps; you can add them yourself (see Installing).
+
+### Publishing an update
+
+The Updater app reads `amogus_doha.json` from the `ota` branch of
+[the release repo](https://github.com/christiaan/lineage-23-amogus_doha/tree/ota)
+through `raw.githubusercontent.com`, and downloads the zip from the
+GitHub release it lists. After uploading a release's zip, write the feed
+and commit it to that branch:
+
+```sh
+./ota-json.py lineage-24.0-<date>-UNOFFICIAL-amogus_doha.zip <tag> -o amogus_doha.json
+```
+
+The script checks that the release asset is there with the zip's size.
+The feed lists only the newest build: the Updater only offers builds
+that are newer than the installed one. The feed can't be a release
+asset itself, because the Updater doesn't follow redirects when it
+fetches the feed.
 
 ### Test builds with your adb key
 
@@ -158,8 +177,16 @@ inside `boot`.
    restarts on the new slot) and follow [Google apps](#google-apps).
    Otherwise choose **No**, then **Reboot system now**.
 
-To update a phone that already runs this ROM, without touching it: turn
-on USB debugging, authorize the computer, and run
+To update a phone that already runs this ROM, use **Settings → System →
+System updates** (the Updater app). It downloads the new release from
+GitHub and installs it to the other slot while you keep using the phone,
+then asks you to restart.
+Google apps stay installed. This works from the first release after
+v2.0.1; v2.0.0 and v2.0.1 don't know where to look, so update those once
+by sideloading.
+
+To sideload an update instead, without touching the phone: turn on USB
+debugging, authorize the computer, and run
 
 ```sh
 adb reboot sideload-auto-reboot
@@ -186,10 +213,10 @@ spare.
   warns that the signature can't be verified.
 - Adding GApps to a phone that has already booted without them needs a
   factory reset afterwards.
-- **Every update sideloaded from recovery removes them**, because only
-  updates from the Updater app keep add-ons, and this ROM has no update
-  server. Sideload MindTheGapps again right after each ROM update, in
-  the same recovery session, before booting.
+- **Updates from the Updater app keep them.** Every update sideloaded
+  from recovery removes them, because only Updater installs run the
+  add-on scripts. After a sideloaded update, sideload MindTheGapps again
+  in the same recovery session, before booting.
 
 Things you should know:
 
@@ -241,6 +268,8 @@ panel and the FPC fingerprint sensor):
 
 - A clean install from stock firmware (4-1-7) following the steps above,
   and updates sideloaded over an earlier 24.0 build.
+- Updates through the Updater app from the GitHub feed, both streamed
+  (the default) and downloaded first.
 - Boot, touch (in Android and in recovery), all four cameras including
   the ultra-wide, fingerprint enrolment and unlock.
 - Calls with audio both ways, SMS and mobile data (on two Dutch
@@ -273,9 +302,9 @@ This build isn't official. Measured against LineageOS's
 [device support requirements](https://github.com/LineageOS/charter/blob/main/device-support-requirements.md),
 it differs in these ways:
 
-- **No updates through the Updater app.** There is no update server for
-  `amogus_doha`, so the Updater app finds nothing. Update with
-  `adb sideload` as described under Installing.
+- **Updates come from GitHub, not from LineageOS's server.** The Updater
+  app checks a feed on GitHub (from the first release after v2.0.1);
+  v2.0.0 and v2.0.1 find no updates and need one sideloaded update.
 - **Firmware is not managed for you.** The zip doesn't contain Motorola
   firmware, and the install steps don't copy it to the second slot. Both
   slots should run the latest stock firmware for doha (Android 10)
