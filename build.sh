@@ -46,7 +46,9 @@ esac
 # release-assets.githubusercontent.com) can't be the feed; a file on
 # raw.githubusercontent.com answers directly. {device} is replaced by the
 # Updater with ro.lineage.device. ota-json.sh writes the feed.
-UPDATER_URI=${UPDATER_URI:-https://raw.githubusercontent.com/christiaan/lineage-23-amogus_doha/ota/{device}.json}
+# (Kept out of ${...:-...}: the } of {device} would end the expansion.)
+default_uri='https://raw.githubusercontent.com/christiaan/lineage-23-amogus_doha/ota/{device}.json'
+UPDATER_URI=${UPDATER_URI:-$default_uri}
 case $UPDATER_URI in
   https://*[\|\&\\[:space:]]*) echo "UPDATER_URI must not contain |, &, \\ or spaces" >&2; exit 1 ;;
   https://*) ;;
