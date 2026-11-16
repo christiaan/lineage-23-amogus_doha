@@ -16,6 +16,9 @@
 #   ZIP_DIR       where finished builds are copied (default: zips/ next to
 #                 SOURCE_DIR)
 #   SKIP_SYNC=1   don't run repo init or repo sync
+#   UPDATER_URI   JSON feed the Updater app checks for OTA updates
+#                 (doha_android#80; default: the ota branch of the GitHub
+#                 release repo). Must be https:// and must not redirect.
 #   ADB_KEY       test builds only: an adb public key (adbkey.pub) to trust
 #                 in recovery and Android, with USB adb on by default, so
 #                 adb works after a wipe without tapping "Allow"
@@ -37,6 +40,19 @@ STAMP=$SRC/.repo/doha-patches
 SKIN_THROTTLE_C=${SKIN_THROTTLE_C:-40}
 case $SKIN_THROTTLE_C in
   ''|*[!0-9]*) echo "SKIN_THROTTLE_C must be a whole number of °C" >&2; exit 1 ;;
+esac
+# The Updater refuses a feed that isn't https:// and doesn't follow
+# redirects when it fetches it, so a GitHub release asset (a 302 to
+# release-assets.githubusercontent.com) can't be the feed; a file on
+# raw.githubusercontent.com answers directly. {device} is replaced by the
+# Updater with ro.lineage.device. ota-json.sh writes the feed.
+# (Kept out of ${...:-...}: the } of {device} would end the expansion.)
+default_uri='https://raw.githubusercontent.com/christiaan/lineage-23-amogus_doha/ota/{device}.json'
+UPDATER_URI=${UPDATER_URI:-$default_uri}
+case $UPDATER_URI in
+  https://*[\|\&\\[:space:]]*) echo "UPDATER_URI must not contain |, &, \\ or spaces" >&2; exit 1 ;;
+  https://*) ;;
+  *) echo "UPDATER_URI must start with https://" >&2; exit 1 ;;
 esac
 
 # repo needs a git identity, and git refuses to read a checkout owned by
@@ -124,7 +140,8 @@ done
 # blob is that of the filled-in patch, so changing a setting counts as a
 # changed patch.
 render_patch() {
-  sed "s/@SKIN_THROTTLE_MC@/$((SKIN_THROTTLE_C * 1000))/g" "$HERE/patches/$1.patch"
+  sed -e "s/@SKIN_THROTTLE_MC@/$((SKIN_THROTTLE_C * 1000))/g" \
+      -e "s|@UPDATER_URI@|$UPDATER_URI|g" "$HERE/patches/$1.patch"
 }
 
 for proj in "${projects[@]}"; do
