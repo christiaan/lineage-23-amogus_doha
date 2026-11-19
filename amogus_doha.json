@@ -1,15 +1,15 @@
 [
   {
-    "datetime": 1794769460,
+    "datetime": 1795098329,
     "files": [
       {
-        "filename": "lineage-24.0-20261115-UNOFFICIAL-amogus_doha.zip",
+        "filename": "lineage-24.0-20261119-UNOFFICIAL-amogus_doha.zip",
         "os_patch_level": "2026-11-01",
         "os_sdk_level": 37,
-        "ota_property_files": "payload_metadata.bin:3416:107200,payload.bin:3416:1041988443,payload_properties.txt:1041991917:156,apex_info.pb:1771:1165,care_map.pb:2983:386,metadata:69:678,metadata.pb:815:908                         ",
-        "sha256": "b7f330a70367aef95c59900e03bb16e56d0ac4b4f2562f0b50fa2432566102fc",
-        "size": 1041995353,
-        "url": "https://github.com/christiaan/lineage-23-amogus_doha/releases/download/v2.0.1/lineage-24.0-20261115-UNOFFICIAL-amogus_doha.zip"
+        "ota_property_files": "payload_metadata.bin:3416:107200,payload.bin:3416:1041995124,payload_properties.txt:1041998598:156,apex_info.pb:1771:1165,care_map.pb:2983:386,metadata:69:678,metadata.pb:815:908                         ",
+        "sha256": "db6b1f4d0093fb943624e8fe4bb6dbd16868b18cf1c5f947f8474792cc2fbe65",
+        "size": 1042002034,
+        "url": "https://github.com/christiaan/lineage-23-amogus_doha/releases/download/v2.0.2/lineage-24.0-20261119-UNOFFICIAL-amogus_doha.zip"
       }
     ],
     "type": "UNOFFICIAL",
