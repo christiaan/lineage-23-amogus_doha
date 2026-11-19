@@ -270,8 +270,9 @@ panel and the FPC fingerprint sensor):
   and updates sideloaded over an earlier 24.0 build.
 - Updates through the Updater app from the GitHub feed, both streamed
   (the default) and downloaded first.
-- Boot, touch (in Android and in recovery), all four cameras including
-  the ultra-wide, fingerprint enrolment and unlock.
+- Boot, touch (in Android and in recovery), double tap to wake, all
+  four cameras including the ultra-wide, fingerprint enrolment and
+  unlock.
 - Calls with audio both ways, SMS and mobile data (on two Dutch
   carriers), Wi-Fi, audio on the speaker, wired headphones and a
   Bluetooth speaker.
@@ -292,9 +293,6 @@ Known issues:
   Stock firmware does the same. Being investigated.
 - After a fresh install from stock, the first boot may find only 2G.
   One more reboot fixes it.
-- Double tap to wake doesn't wake the screen on phones with the
-  FocalTech (Tianma) touch panel. The setting is there and on by
-  default, but a double tap does nothing on these panels.
 
 ## Differences from an official LineageOS device
 
