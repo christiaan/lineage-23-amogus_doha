@@ -286,6 +286,9 @@ sensor and the dual-SIM XT2019-2.
 
 Known issues:
 
+- **Wi-Fi can stay disconnected after a Wi-Fi firmware crash** when the
+  phone is a Wi-Fi client (not a hotspot). Wi-Fi shows as on but doesn't
+  connect. Turning Wi-Fi off and on fixes it. Being investigated.
 - **VoLTE depends on the modem's carrier profile.** The modem picks one
   of Motorola's carrier profiles by SIM. For carriers Motorola has no
   profile for (for example SIMs on KPN's network in the Netherlands) it
