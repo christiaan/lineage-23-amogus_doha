@@ -1,8 +1,8 @@
 diff --git a/BoardConfig.mk b/BoardConfig.mk
-index 9e00b92..a4ddff2 100644
+index 9e00b92..463a36d 100644
 --- a/BoardConfig.mk
 +++ b/BoardConfig.mk
-@@ -31,9 +31,43 @@ ifneq ($(TARGET_PREBUILT_KERNEL),)
+@@ -31,9 +31,44 @@ ifneq ($(TARGET_PREBUILT_KERNEL),)
        $(wildcard device/motorola/amogus-kernel/modules/*.ko)
  endif
  
@@ -33,6 +33,7 @@ index 9e00b92..a4ddff2 100644
 +# The Himax driver is built in and only needs its firmware (device.mk).
 +RECOVERY_KERNEL_MODULES := focaltech_0flash_mmi_doha.ko
 +BOARD_VENDOR_SEPOLICY_DIRS += device/motorola/amogus_doha/sepolicy/recovery
++BOARD_VENDOR_SEPOLICY_DIRS += device/motorola/amogus_doha/sepolicy/vendor
 +
  # Partitions
  BOARD_VENDORIMAGE_PARTITION_SIZE := 620756992
@@ -47,20 +48,24 @@ index 9e00b92..a4ddff2 100644
  
  # Recovery
 diff --git a/device.mk b/device.mk
-index 9051022..ff772d6 100644
+index 9051022..7a659d9 100644
 --- a/device.mk
 +++ b/device.mk
-@@ -27,7 +27,8 @@ TARGET_USES_FINGERPRINT_V2_1 := true
+@@ -27,7 +27,12 @@ TARGET_USES_FINGERPRINT_V2_1 := true
  # Overlays
  PRODUCT_PACKAGES += \
      dohaFrameworkOverlay \
 -    dohaSystemUIOverlay
 +    dohaSystemUIOverlay \
 +    dohaApertureOverlay
++
++# Carrier MBN fallback for SIMs no MBN matches (doha_android#61)
++PRODUCT_PACKAGES += \
++    mbn_fallback
  
  # Partitions
  TARGET_USES_DYNAMIC_PARTITIONS := false
-@@ -44,4 +45,24 @@ PRODUCT_BUILD_PROP_OVERRIDES += \
+@@ -44,4 +49,24 @@ PRODUCT_BUILD_PROP_OVERRIDES += \
      BuildDesc="doha_retail-user 10 QPIS30.28-Q3-28-26-4-1-3 f0a9a release-keys" \
      BuildFingerprint=motorola/doha_retail/doha:10/QPIS30.28-Q3-28-26-4-1-3/f0a9a:user/release-keys
  
@@ -85,6 +90,632 @@ index 9051022..ff772d6 100644
 +    lineage.updater.uri=@UPDATER_URI@
 +
  $(call inherit-product-if-exists, vendor/motorola/amogus_doha/amogus_doha-vendor.mk)
+diff --git a/mbn_fallback/Android.bp b/mbn_fallback/Android.bp
+new file mode 100644
+index 0000000..d042aa3
+--- /dev/null
++++ b/mbn_fallback/Android.bp
+@@ -0,0 +1,10 @@
++// Selects a same-country carrier MBN when the modem falls back to
++// EMEA_APAC_SUPER, which has IMS off (doha_android#61).
++cc_binary {
++    name: "mbn_fallback",
++    vendor: true,
++    srcs: ["mbn_fallback.c"],
++    shared_libs: ["liblog"],
++    cflags: ["-Wall", "-Werror"],
++    init_rc: ["mbn_fallback.rc"],
++}
+diff --git a/mbn_fallback/mbn_fallback.c b/mbn_fallback/mbn_fallback.c
+new file mode 100644
+index 0000000..22b9b48
+--- /dev/null
++++ b/mbn_fallback/mbn_fallback.c
+@@ -0,0 +1,568 @@
++/*
++ * mbn_fallback: pick a same-country carrier MBN when the doha modem falls
++ * back to EMEA_APAC_SUPER (doha_android#61).
++ *
++ * The modem selects a carrier MBN (modem configuration) by matching the
++ * SIM's IIN and PLMN against lists in each MBN's trailer. A SIM that
++ * matches nothing (for example every SIM on KPN's network: KPN, simyo,
++ * Youfone, IIN 893108, PLMN 204-08) gets the wildcard EMEA_APAC_SUPER,
++ * which has /nv/item_files/ims/IMS_enable = 0, so IMS never registers and
++ * there's no VoLTE. The MBNs are signed, so they can't be edited.
++ *
++ * This tool asks the modem's PDC service (QMI service 0x24, over QRTR)
++ * which software MBN is selected for each subscription. When it is the
++ * super MBN and the SIM's PLMN is in a country we have a tested fallback
++ * for, it selects and activates that MBN instead. Activation restarts the
++ * modem. When a fallback MBN is selected but the SIM is now from another
++ * country, it goes back to the super MBN, so the fallback never sticks to
++ * a SIM it wasn't chosen for.
++ *
++ * Run as a oneshot service from init on SIM and MBN changes; see
++ * mbn_fallback.rc.
++ */
++
++#include <errno.h>
++#include <poll.h>
++#include <stdarg.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/socket.h>
++#include <sys/system_properties.h>
++#include <time.h>
++#include <unistd.h>
++
++#include <linux/qrtr.h>
++
++#ifndef AF_QIPCRTR
++#define AF_QIPCRTR 42
++#endif
++
++#ifdef MBN_FALLBACK_NO_LIBLOG
++#define LOGI(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while (0)
++#define LOGE(...) LOGI(__VA_ARGS__)
++#else
++#include <android/log.h>
++#define LOG_TAG "mbn_fallback"
++#define LOGI(...) do { __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__); if (verbose) { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } } while (0)
++#define LOGE(...) do { __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__); if (verbose) { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } } while (0)
++#endif
++
++static int verbose;
++
++#define PDC_SERVICE 0x24
++
++#define PDC_GET_SELECTED_CONFIG 0x22
++#define PDC_SET_SELECTED_CONFIG 0x23
++#define PDC_ACTIVATE_CONFIG 0x27
++
++#define QMI_REQUEST 0x00
++#define QMI_RESPONSE 0x02
++#define QMI_INDICATION 0x04
++
++#define PDC_CONFIG_SOFTWARE 1
++
++#define QMI_ERR_NOT_PROVISIONED 0x0010
++
++#define TIMEOUT_MS 10000
++
++#define SUPER_MBN "emea_apac_super.mbn"
++
++/*
++ * Fallbacks, per mobile country code. Only countries where the fallback was
++ * tested are listed. skip_mnc lists the networks that have their own MBN in
++ * fsg: the modem selects those itself, so their SIMs are left alone even if
++ * this runs before the modem's own selection has settled.
++ *
++ * 204 (Netherlands): VF_NLD gave simyo (KPN network, 204-08) IMS
++ * registration on 2026-11-14 (doha_android#61). fsg has VF_NLD (204-04),
++ * TMO_NLD (204-16, 204-20) and TELE2_NLD (204-02).
++ */
++static const struct fallback {
++    const char *mcc;
++    const char *mbn;
++    const char *skip_mnc[8];
++} fallbacks[] = {
++    { "204", "vf_nld.mbn", { "02", "04", "16", "20", NULL } },
++};
++
++struct qmi_conn {
++    int fd;
++    struct sockaddr_qrtr srv;
++    uint16_t txn;
++};
++
++/* ---- QRTR / QMI plumbing ---- */
++
++static long now_ms(void)
++{
++    struct timespec ts;
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    return ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
++}
++
++static int qrtr_recv(int fd, void *buf, size_t len, struct sockaddr_qrtr *from, long deadline)
++{
++    for (;;) {
++        long left = deadline - now_ms();
++        if (left <= 0)
++            return -ETIMEDOUT;
++        struct pollfd p = { .fd = fd, .events = POLLIN };
++        int r = poll(&p, 1, (int)left);
++        if (r < 0) {
++            if (errno == EINTR)
++                continue;
++            return -errno;
++        }
++        if (r == 0)
++            return -ETIMEDOUT;
++        socklen_t sl = sizeof(*from);
++        ssize_t n = recvfrom(fd, buf, len, 0, (struct sockaddr *)from, &sl);
++        if (n < 0) {
++            if (errno == EINTR)
++                continue;
++            return -errno;
++        }
++        return (int)n;
++    }
++}
++
++static int qmi_open(struct qmi_conn *c)
++{
++    memset(c, 0, sizeof(*c));
++    c->txn = 1;
++    c->fd = socket(AF_QIPCRTR, SOCK_DGRAM, 0);
++    if (c->fd < 0) {
++        LOGE("socket(AF_QIPCRTR): %s", strerror(errno));
++        return -1;
++    }
++
++    struct sockaddr_qrtr local;
++    socklen_t sl = sizeof(local);
++    if (getsockname(c->fd, (struct sockaddr *)&local, &sl) < 0) {
++        LOGE("getsockname: %s", strerror(errno));
++        return -1;
++    }
++
++    struct qrtr_ctrl_pkt pkt;
++    memset(&pkt, 0, sizeof(pkt));
++    pkt.cmd = QRTR_TYPE_NEW_LOOKUP;
++    pkt.server.service = PDC_SERVICE;
++    pkt.server.instance = 0; /* any version and instance */
++
++    struct sockaddr_qrtr ctrl = local;
++    ctrl.sq_port = QRTR_PORT_CTRL;
++    if (sendto(c->fd, &pkt, sizeof(pkt), 0, (struct sockaddr *)&ctrl, sizeof(ctrl)) < 0) {
++        LOGE("QRTR lookup: %s", strerror(errno));
++        return -1;
++    }
++
++    long deadline = now_ms() + TIMEOUT_MS;
++    for (;;) {
++        struct qrtr_ctrl_pkt in;
++        struct sockaddr_qrtr from;
++        int n = qrtr_recv(c->fd, &in, sizeof(in), &from, deadline);
++        if (n < 0) {
++            LOGE("QRTR lookup: no PDC service (%s)", strerror(-n));
++            return -1;
++        }
++        if (from.sq_port != QRTR_PORT_CTRL || n < (int)sizeof(in))
++            continue;
++        if (in.cmd != QRTR_TYPE_NEW_SERVER)
++            continue;
++        if (in.server.service == 0 && in.server.node == 0 && in.server.port == 0) {
++            LOGE("QRTR lookup: PDC service not found");
++            return -1;
++        }
++        if (in.server.service != PDC_SERVICE)
++            continue;
++        c->srv.sq_family = AF_QIPCRTR;
++        c->srv.sq_node = in.server.node;
++        c->srv.sq_port = in.server.port;
++        return 0;
++    }
++}
++
++static void qmi_close(struct qmi_conn *c)
++{
++    if (c->fd >= 0)
++        close(c->fd);
++    c->fd = -1;
++}
++
++struct tlvbuf {
++    uint8_t b[512];
++    size_t len;
++};
++
++static void tlv_add(struct tlvbuf *t, uint8_t type, const void *v, uint16_t len)
++{
++    if (t->len + 3 + len > sizeof(t->b))
++        abort();
++    t->b[t->len++] = type;
++    t->b[t->len++] = len & 0xff;
++    t->b[t->len++] = len >> 8;
++    memcpy(t->b + t->len, v, len);
++    t->len += len;
++}
++
++static void tlv_add_u32(struct tlvbuf *t, uint8_t type, uint32_t v)
++{
++    uint8_t le[4] = { v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, v >> 24 };
++    tlv_add(t, type, le, 4);
++}
++
++/* Find TLV `type` in a QMI message body. Returns its length or -1. */
++static int tlv_find(const uint8_t *body, size_t len, uint8_t type, const uint8_t **val)
++{
++    size_t off = 0;
++    while (off + 3 <= len) {
++        uint8_t t = body[off];
++        uint16_t l = body[off + 1] | (body[off + 2] << 8);
++        if (off + 3 + l > len)
++            return -1;
++        if (t == type) {
++            *val = body + off + 3;
++            return l;
++        }
++        off += 3 + l;
++    }
++    return -1;
++}
++
++static uint16_t le16(const uint8_t *p) { return p[0] | (p[1] << 8); }
++static uint32_t le32(const uint8_t *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24); }
++
++/*
++ * Send a PDC request with token `token`, wait for its response, then for the
++ * matching indication (same message ID and token). The indication body is
++ * copied to ind/ind_len. Returns 0, or -1 on any failure.
++ */
++static int pdc_call(struct qmi_conn *c, uint16_t msg, struct tlvbuf *req, uint32_t token,
++                    uint8_t *ind, size_t *ind_len)
++{
++    uint8_t out[7 + sizeof(req->b)];
++    uint16_t txn = c->txn++;
++    out[0] = QMI_REQUEST;
++    out[1] = txn & 0xff;
++    out[2] = txn >> 8;
++    out[3] = msg & 0xff;
++    out[4] = msg >> 8;
++    out[5] = req->len & 0xff;
++    out[6] = req->len >> 8;
++    memcpy(out + 7, req->b, req->len);
++
++    if (sendto(c->fd, out, 7 + req->len, 0, (struct sockaddr *)&c->srv, sizeof(c->srv)) < 0) {
++        LOGE("PDC 0x%02x: send: %s", msg, strerror(errno));
++        return -1;
++    }
++
++    long deadline = now_ms() + TIMEOUT_MS;
++    int got_resp = 0;
++    for (;;) {
++        uint8_t in[4096];
++        struct sockaddr_qrtr from;
++        int n = qrtr_recv(c->fd, in, sizeof(in), &from, deadline);
++        if (n < 0) {
++            LOGE("PDC 0x%02x: no %s (%s)", msg, got_resp ? "indication" : "response", strerror(-n));
++            return -1;
++        }
++        if (from.sq_node != c->srv.sq_node || from.sq_port != c->srv.sq_port || n < 7)
++            continue;
++        uint8_t type = in[0];
++        uint16_t rtxn = le16(in + 1), rmsg = le16(in + 3), rlen = le16(in + 5);
++        if (rmsg != msg || 7 + rlen > n)
++            continue;
++        const uint8_t *body = in + 7, *v;
++
++        if (type == QMI_RESPONSE && rtxn == txn) {
++            if (tlv_find(body, rlen, 0x02, &v) < 4) {
++                LOGE("PDC 0x%02x: response without result", msg);
++                return -1;
++            }
++            if (le16(v) != 0) {
++                LOGE("PDC 0x%02x: failed, QMI error 0x%04x", msg, le16(v + 2));
++                return -1;
++            }
++            got_resp = 1;
++            continue;
++        }
++        if (type == QMI_INDICATION) {
++            if (tlv_find(body, rlen, 0x10, &v) == 4 && le32(v) != token)
++                continue;
++            if (tlv_find(body, rlen, 0x01, &v) >= 2 && le16(v) != 0) {
++                if (le16(v) == QMI_ERR_NOT_PROVISIONED)
++                    return -2; /* e.g. no config selected */
++                LOGE("PDC 0x%02x: indication error 0x%04x", msg, le16(v));
++                return -1;
++            }
++            if (ind && ind_len) {
++                size_t l = rlen < *ind_len ? rlen : *ind_len;
++                memcpy(ind, body, l);
++                *ind_len = l;
++            }
++            return 0;
++        }
++    }
++}
++
++static void add_sub(struct tlvbuf *t, int sub)
++{
++    /* Subscription ID TLV; left out for SUB0, as qmicli does. */
++    if (sub > 0)
++        tlv_add_u32(t, 0x11, (uint32_t)sub);
++}
++
++/* Read the active software MBN config ID of `sub` into id (NUL-terminated). */
++static int pdc_get_selected(struct qmi_conn *c, int sub, char *id, size_t idlen)
++{
++    struct tlvbuf req = { .len = 0 };
++    uint32_t token = 0x6d620000 | (sub << 8) | PDC_GET_SELECTED_CONFIG;
++    tlv_add_u32(&req, 0x01, PDC_CONFIG_SOFTWARE);
++    tlv_add_u32(&req, 0x10, token);
++    add_sub(&req, sub);
++
++    uint8_t ind[1024];
++    size_t ind_len = sizeof(ind);
++    int r = pdc_call(c, PDC_GET_SELECTED_CONFIG, &req, token, ind, &ind_len);
++    if (r == -2) {
++        id[0] = 0; /* nothing selected for this subscription */
++        return 0;
++    }
++    if (r < 0)
++        return -1;
++
++    const uint8_t *v;
++    int l = tlv_find(ind, ind_len, 0x11, &v);
++    if (l < 1 || v[0] + 1 > l || v[0] == 0) {
++        id[0] = 0;
++        return 0; /* nothing active */
++    }
++    size_t n = v[0] < idlen - 1 ? v[0] : idlen - 1;
++    memcpy(id, v + 1, n);
++    id[n] = 0;
++    return 0;
++}
++
++static int pdc_select_and_activate(struct qmi_conn *c, int sub, const char *id)
++{
++    size_t idl = strlen(id);
++    if (idl > 255)
++        return -1;
++
++    struct tlvbuf req = { .len = 0 };
++    uint32_t token = 0x6d620000 | (sub << 8) | PDC_SET_SELECTED_CONFIG;
++    uint8_t cfg[4 + 1 + 255];
++    cfg[0] = PDC_CONFIG_SOFTWARE; cfg[1] = cfg[2] = cfg[3] = 0;
++    cfg[4] = (uint8_t)idl;
++    memcpy(cfg + 5, id, idl);
++    tlv_add(&req, 0x01, cfg, 5 + idl);
++    tlv_add_u32(&req, 0x10, token);
++    add_sub(&req, sub);
++    if (pdc_call(c, PDC_SET_SELECTED_CONFIG, &req, token, NULL, NULL) < 0)
++        return -1;
++
++    struct tlvbuf act = { .len = 0 };
++    token = 0x6d620000 | (sub << 8) | PDC_ACTIVATE_CONFIG;
++    tlv_add_u32(&act, 0x01, PDC_CONFIG_SOFTWARE);
++    tlv_add_u32(&act, 0x10, token);
++    add_sub(&act, sub);
++    /* The modem restarts to apply it; a missing indication isn't fatal. */
++    uint8_t ind[64];
++    size_t ind_len = sizeof(ind);
++    if (pdc_call(c, PDC_ACTIVATE_CONFIG, &act, token, ind, &ind_len) < 0)
++        LOGI("SUB%d: activate didn't confirm; the modem may already be restarting", sub);
++    return 0;
++}
++
++/* ---- policy ---- */
++
++static const char *base_name(const char *path)
++{
++    const char *s = strrchr(path, '/');
++    return s ? s + 1 : path;
++}
++
++static const struct fallback *fallback_for_mcc(const char *mcc)
++{
++    for (size_t i = 0; i < sizeof(fallbacks) / sizeof(fallbacks[0]); i++)
++        if (!strcmp(fallbacks[i].mcc, mcc))
++            return &fallbacks[i];
++    return NULL;
++}
++
++static const struct fallback *fallback_by_mbn(const char *mbn)
++{
++    for (size_t i = 0; i < sizeof(fallbacks) / sizeof(fallbacks[0]); i++)
++        if (!strcmp(fallbacks[i].mbn, mbn))
++            return &fallbacks[i];
++    return NULL;
++}
++
++static int mnc_skipped(const struct fallback *f, const char *mnc)
++{
++    for (int i = 0; f->skip_mnc[i]; i++)
++        if (!strcmp(f->skip_mnc[i], mnc))
++            return 1;
++    return 0;
++}
++
++/*
++ * Decide the MBN for one subscription. plmn is the SIM's home PLMN (MCC +
++ * MNC digits). Returns 1 if an MBN was switched, 0 if nothing to do, -1 on
++ * error.
++ */
++static int handle_sub(struct qmi_conn *c, int sub, const char *plmn, int dry_run)
++{
++    size_t pl = strlen(plmn);
++    if (pl < 5 || pl > 6 || strspn(plmn, "0123456789") != pl)
++        return 0; /* no SIM, or not loaded yet */
++    char mcc[4], mnc[4];
++    memcpy(mcc, plmn, 3); mcc[3] = 0;
++    strcpy(mnc, plmn + 3);
++
++    char active[256];
++    if (pdc_get_selected(c, sub, active, sizeof(active)) < 0)
++        return -1;
++    if (!active[0]) {
++        LOGI("SUB%d: no MBN active yet", sub);
++        return 0;
++    }
++
++    const char *base = base_name(active);
++    size_t dirlen = base - active;
++    const char *want = NULL;
++    const struct fallback *f;
++
++    if (!strcmp(base, SUPER_MBN)) {
++        f = fallback_for_mcc(mcc);
++        if (f && !mnc_skipped(f, mnc))
++            want = f->mbn;
++    } else if ((f = fallback_by_mbn(base)) != NULL && strcmp(f->mcc, mcc)) {
++        /* Our fallback, but the SIM is from another country now. */
++        want = SUPER_MBN;
++    }
++
++    if (!want) {
++        LOGI("SUB%d: SIM %s, MBN %s: nothing to do", sub, plmn, base);
++        return 0;
++    }
++    if (dirlen + strlen(want) >= sizeof(active)) {
++        LOGE("SUB%d: config ID too long", sub);
++        return -1;
++    }
++
++    char target[256];
++    memcpy(target, active, dirlen);
++    strcpy(target + dirlen, want);
++    LOGI("SUB%d: SIM %s, MBN %s: selecting %s%s", sub, plmn, base, target, dry_run ? " (dry run)" : "");
++    if (dry_run)
++        return 0;
++    if (pdc_select_and_activate(c, sub, target) < 0) {
++        LOGE("SUB%d: selecting %s failed", sub, target);
++        return -1;
++    }
++    return 1;
++}
++
++/* gsm.sim.operator.numeric holds one comma-separated PLMN per slot. */
++static int process(int dry_run, char *seen, size_t seenlen)
++{
++    char numeric[PROP_VALUE_MAX];
++    __system_property_get("gsm.sim.operator.numeric", numeric);
++    snprintf(seen, seenlen, "%s", numeric);
++
++    struct qmi_conn c;
++    if (qmi_open(&c) < 0) {
++        qmi_close(&c);
++        return -1;
++    }
++
++    int ret = 0;
++    char *p = numeric;
++    for (int sub = 0; sub < 2; sub++) {
++        /* strsep keeps empty fields, so slot positions stay right. */
++        char *tok = p ? strsep(&p, ",") : NULL;
++        if (!tok)
++            break;
++        int r = handle_sub(&c, sub, tok, dry_run);
++        if (r < 0)
++            ret = -1;
++        else if (r > 0)
++            break; /* the modem restarts; the next trigger re-checks */
++    }
++    qmi_close(&c);
++    return ret;
++}
++
++/* -q: print the active MBN of each subscription. -f MBN: select MBN (a file
++ * name in the active MBN's directory) on SUB0, for testing. */
++static int query_or_force(const char *force)
++{
++    struct qmi_conn c;
++    if (qmi_open(&c) < 0) {
++        qmi_close(&c);
++        return 1;
++    }
++    int ret = 0;
++    for (int sub = 0; sub < (force ? 1 : 2); sub++) {
++        char active[256];
++        if (pdc_get_selected(&c, sub, active, sizeof(active)) < 0) {
++            ret = 1;
++            continue;
++        }
++        printf("SUB%d: %s\n", sub, active[0] ? active : "(none)");
++        if (force && active[0]) {
++            size_t dirlen = base_name(active) - active;
++            char target[256];
++            snprintf(target, sizeof(target), "%.*s%s", (int)dirlen, active, force);
++            printf("SUB%d: selecting %s\n", sub, target);
++            if (pdc_select_and_activate(&c, sub, target) < 0)
++                ret = 1;
++        }
++    }
++    qmi_close(&c);
++    return ret;
++}
++
++int main(int argc, char **argv)
++{
++    int dry_run = 0, settle = 15, query = 0;
++    const char *force = NULL;
++    int opt;
++    while ((opt = getopt(argc, argv, "nvqf:s:")) != -1) {
++        switch (opt) {
++        case 'n': dry_run = 1; break;
++        case 'v': verbose = 1; break;
++        case 'q': query = 1; break;
++        case 'f': force = optarg; break;
++        case 's': settle = atoi(optarg); break;
++        default:
++            fprintf(stderr, "usage: %s [-n] [-v] [-s settle_seconds] | -q | -f MBN\n", argv[0]);
++            return 2;
++        }
++    }
++    if (query || force) {
++        verbose = 1;
++        return query_or_force(force);
++    }
++
++    /*
++     * Let the modem finish its own MBN selection after a SIM change before
++     * looking. If the SIM changes again while this runs, init can't start
++     * the oneshot service again, so check once more at the end.
++     */
++    char seen[PROP_VALUE_MAX], now[PROP_VALUE_MAX];
++    for (int round = 0; round < 3; round++) {
++        if (settle > 0)
++            sleep(settle);
++        int r = process(dry_run, seen, sizeof(seen));
++        if (r < 0)
++            return 1;
++        __system_property_get("gsm.sim.operator.numeric", now);
++        if (!strcmp(seen, now))
++            break;
++    }
++    return 0;
++}
+diff --git a/mbn_fallback/mbn_fallback.rc b/mbn_fallback/mbn_fallback.rc
+new file mode 100644
+index 0000000..4766435
+--- /dev/null
++++ b/mbn_fallback/mbn_fallback.rc
+@@ -0,0 +1,16 @@
++# doha_android#61: when the modem picks the wildcard EMEA_APAC_SUPER MBN
++# (IMS off) for a SIM no carrier MBN matches, select a same-country MBN with
++# IMS on. Runs on every SIM change and every MBN change; it does nothing
++# when there's nothing to fix.
++service vendor.mbn_fallback /vendor/bin/mbn_fallback
++    class late_start
++    user radio
++    group radio
++    oneshot
++    disabled
++
++on property:gsm.sim.operator.numeric=*
++    start vendor.mbn_fallback
++
++on property:persist.vendor.radio.mcfg_version=*
++    start vendor.mbn_fallback
+diff --git a/props/build_doha.prop b/props/build_doha.prop
+index f48afb7..3baa38d 100644
+--- a/props/build_doha.prop
++++ b/props/build_doha.prop
+@@ -18,3 +18,9 @@ ro.sf.lcd_density=380
+ 
+ # Wfd
+ persist.debug.wfd.enable=1
++
++# Radio: start Motorola's MBN loader in QCRIL, as stock does. It loads
++# the carrier MBNs from /vendor/fsg into the modem; without it a modem
++# whose EFS holds no MBN never gets a carrier config (Forgejo #61).
++persist.vendor.radio.start_ota_daemon=1
++persist.vendor.radio.sw_mbn_update=0
 diff --git a/recovery/root/system/etc/init/touch_doha.rc b/recovery/root/system/etc/init/touch_doha.rc
 new file mode 100644
 index 0000000..b8642da
@@ -188,16 +819,26 @@ index 0000000..8971ac0
 +recovery_only(`
 +  allow init vendor_sysfs_touchpanel:file w_file_perms;
 +')
-diff --git a/props/build_doha.prop b/props/build_doha.prop
---- a/props/build_doha.prop
-+++ b/props/build_doha.prop
-@@ -18,3 +18,9 @@
- 
- # Wfd
- persist.debug.wfd.enable=1
+diff --git a/sepolicy/vendor/file_contexts b/sepolicy/vendor/file_contexts
+new file mode 100644
+index 0000000..8cb36d3
+--- /dev/null
++++ b/sepolicy/vendor/file_contexts
+@@ -0,0 +1 @@
++/vendor/bin/mbn_fallback    u:object_r:mbn_fallback_exec:s0
+diff --git a/sepolicy/vendor/mbn_fallback.te b/sepolicy/vendor/mbn_fallback.te
+new file mode 100644
+index 0000000..f67fe2e
+--- /dev/null
++++ b/sepolicy/vendor/mbn_fallback.te
+@@ -0,0 +1,10 @@
++# doha_android#61: mbn_fallback selects the modem's carrier MBN over QMI
++# PDC (QRTR) when the modem fell back to EMEA_APAC_SUPER.
++type mbn_fallback, domain;
++type mbn_fallback_exec, exec_type, vendor_file_type, file_type;
++init_daemon_domain(mbn_fallback)
 +
-+# Radio: start Motorola's MBN loader in QCRIL, as stock does. It loads
-+# the carrier MBNs from /vendor/fsg into the modem; without it a modem
-+# whose EFS holds no MBN never gets a carrier config (Forgejo #61).
-+persist.vendor.radio.start_ota_daemon=1
-+persist.vendor.radio.sw_mbn_update=0
++allow mbn_fallback self:qipcrtr_socket create_socket_perms_no_ioctl;
++
++# gsm.sim.operator.numeric: the SIM's home PLMN per slot.
++get_prop(mbn_fallback, telephony_status_prop)
