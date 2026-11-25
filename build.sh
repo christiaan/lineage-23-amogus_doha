@@ -16,11 +16,17 @@
 #   ZIP_DIR       where finished builds are copied (default: zips/ next to
 #                 SOURCE_DIR)
 #   SKIP_SYNC=1   don't run repo init or repo sync
+#   UPDATER_URI   JSON feed the Updater app checks for OTA updates
+#                 (doha_android#80; default: the ota branch of the GitHub
+#                 release repo). Must be https:// and must not redirect.
 #   ADB_KEY       test builds only: an adb public key (adbkey.pub) to trust
 #                 in recovery and Android, with USB adb on by default, so
 #                 adb works after a wipe without tapping "Allow"
-#                 (doha_android#64). The zip gets an -adbkey suffix. Never
-#                 release such a build.
+#                 (doha_android#64). The zip gets an -adbkey suffix, and
+#                 the build number (ro.build.version.incremental, the
+#                 zip's post-build-incremental) starts with "adbkey.", which
+#                 ota-json.py refuses even if the zip is renamed
+#                 (doha_android#95). Never release such a build.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -37,6 +43,21 @@ STAMP=$SRC/.repo/doha-patches
 SKIN_THROTTLE_C=${SKIN_THROTTLE_C:-40}
 case $SKIN_THROTTLE_C in
   ''|*[!0-9]*) echo "SKIN_THROTTLE_C must be a whole number of °C" >&2; exit 1 ;;
+esac
+# The Updater refuses a feed that isn't https:// and doesn't follow
+# redirects when it fetches it, so a GitHub release asset (a 302 to
+# release-assets.githubusercontent.com) can't be the feed; a file on
+# raw.githubusercontent.com answers directly. {device} is replaced by the
+# Updater with ro.lineage.device. ota-json.py writes the feed.
+# (Kept out of ${...:-...}: the } of {device} would end the expansion.)
+default_uri='https://raw.githubusercontent.com/christiaan/lineage-23-amogus_doha/ota/{device}.json'
+UPDATER_URI=${UPDATER_URI:-$default_uri}
+# The URI goes into a sed replacement (| and & are special there) and then
+# into a makefile line, where # starts a comment and make expands $.
+case $UPDATER_URI in
+  https://*[\|\&\\#\$[:space:]]*) echo "UPDATER_URI must not contain |, &, \\, #, \$ or spaces" >&2; exit 1 ;;
+  https://*) ;;
+  *) echo "UPDATER_URI must start with https://" >&2; exit 1 ;;
 esac
 
 # repo needs a git identity, and git refuses to read a checkout owned by
@@ -124,7 +145,8 @@ done
 # blob is that of the filled-in patch, so changing a setting counts as a
 # changed patch.
 render_patch() {
-  sed "s/@SKIN_THROTTLE_MC@/$((SKIN_THROTTLE_C * 1000))/g" "$HERE/patches/$1.patch"
+  sed -e "s/@SKIN_THROTTLE_MC@/$((SKIN_THROTTLE_C * 1000))/g" \
+      -e "s|@UPDATER_URI@|$UPDATER_URI|g" "$HERE/patches/$1.patch"
 }
 
 for proj in "${projects[@]}"; do
@@ -181,7 +203,21 @@ PRODUCT_COPY_FILES += \
     vendor/extra/adb_keys:$(TARGET_COPY_OUT_PRODUCT)/etc/security/adb_keys
 PRODUCT_SYSTEM_DEFAULT_PROPERTIES += persist.sys.usb.config=adb
 MK
+  # Mark the build itself, not only the zip's name, so a renamed test zip
+  # can't be published as an OTA (doha_android#95). Soong writes this into
+  # build_number.txt; build/soong/scripts/gen_build_prop.py uses it as
+  # ro.build.version.incremental because it doesn't start with "eng.", and
+  # ota_from_target_files copies that into the zip's metadata as
+  # post-build-incremental. On the phone it shows in
+  # ro.build.version.incremental and ro.build.description (not in Settings,
+  # which shows ro.build.display.id). The epoch keeps it unique per build,
+  # like the default incremental. Switching between test and release
+  # builds makes Kati re-read the makefiles (HAS_BUILD_NUMBER changes), a
+  # few extra minutes; nothing else is rebuilt for it.
+  export BUILD_NUMBER=adbkey.$(date +%s)
 else
+  # A release must not inherit a test build's marker from the environment.
+  unset BUILD_NUMBER
   # Copied files stay in out/ after their rule is gone and would end up in
   # the images, so a normal build after a test build must delete them.
   rm -f "${key_files[@]}"
@@ -224,6 +260,17 @@ zip=$(find "$product" -maxdepth 1 -name '*.zip' ! -name "${ota##*/}" -samefile "
 [ -n "$zip" ] || { echo "No dated zip hard-linked to $ota" >&2; exit 1; }
 built=$(basename "$zip" .zip)
 name=$built${ADB_KEY:+-adbkey}
+# Check the adbkey marker made it into the zip (test builds) or is absent
+# (releases); ota-json.py relies on it (doha_android#95).
+incremental=$(python3 -c 'import sys, zipfile
+for line in zipfile.ZipFile(sys.argv[1]).read("META-INF/com/android/metadata").decode().splitlines():
+    if line.startswith("post-build-incremental="):
+        print(line.partition("=")[2])' "$zip")
+case $incremental,${ADB_KEY:+test} in
+  adbkey.*,test) ;;
+  *,test) echo "$zip: post-build-incremental is '$incremental', expected adbkey.*" >&2; exit 1 ;;
+  adbkey.*,) echo "$zip: post-build-incremental '$incremental' marks a test build, but ADB_KEY isn't set" >&2; exit 1 ;;
+esac
 mkdir -p "$dest"
 cp "$product/$built.zip" "$dest/$name.zip"
 for img in boot dtbo vbmeta; do
