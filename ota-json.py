@@ -52,7 +52,11 @@ def remote_size(url):
     # way the Updater's download client and update_engine do.
     req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "ota-json"})
     with urllib.request.urlopen(req, timeout=30) as resp:
-        return int(resp.headers["Content-Length"])
+        length = resp.headers.get("Content-Length")
+    if length is None:
+        sys.exit(f"{url}: no Content-Length in the response, can't check the size"
+                 " (--no-check skips this check)")
+    return int(length)
 
 
 def main():
@@ -72,6 +76,12 @@ def main():
 
     with zipfile.ZipFile(args.zip) as zf:
         meta = metadata(zf)
+    # build.sh gives test builds (ADB_KEY set) a build number starting with
+    # "adbkey.", so a test zip is refused even after a rename (doha_android#95).
+    incremental = meta.get("post-build-incremental", "")
+    if incremental.startswith("adbkey."):
+        sys.exit(f"{filename}: post-build-incremental is {incremental}, a test build"
+                 " with our adb key; never release it")
     if meta.get("ota-type") != "AB":
         sys.exit(f"{filename}: ota-type is {meta.get('ota-type')}, expected AB")
 

@@ -22,8 +22,11 @@
 #   ADB_KEY       test builds only: an adb public key (adbkey.pub) to trust
 #                 in recovery and Android, with USB adb on by default, so
 #                 adb works after a wipe without tapping "Allow"
-#                 (doha_android#64). The zip gets an -adbkey suffix. Never
-#                 release such a build.
+#                 (doha_android#64). The zip gets an -adbkey suffix, and
+#                 the build number (ro.build.version.incremental, the
+#                 zip's post-build-incremental) starts with "adbkey.", which
+#                 ota-json.py refuses even if the zip is renamed
+#                 (doha_android#95). Never release such a build.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -45,12 +48,14 @@ esac
 # redirects when it fetches it, so a GitHub release asset (a 302 to
 # release-assets.githubusercontent.com) can't be the feed; a file on
 # raw.githubusercontent.com answers directly. {device} is replaced by the
-# Updater with ro.lineage.device. ota-json.sh writes the feed.
+# Updater with ro.lineage.device. ota-json.py writes the feed.
 # (Kept out of ${...:-...}: the } of {device} would end the expansion.)
 default_uri='https://raw.githubusercontent.com/christiaan/lineage-23-amogus_doha/ota/{device}.json'
 UPDATER_URI=${UPDATER_URI:-$default_uri}
+# The URI goes into a sed replacement (| and & are special there) and then
+# into a makefile line, where # starts a comment and make expands $.
 case $UPDATER_URI in
-  https://*[\|\&\\[:space:]]*) echo "UPDATER_URI must not contain |, &, \\ or spaces" >&2; exit 1 ;;
+  https://*[\|\&\\#\$[:space:]]*) echo "UPDATER_URI must not contain |, &, \\, #, \$ or spaces" >&2; exit 1 ;;
   https://*) ;;
   *) echo "UPDATER_URI must start with https://" >&2; exit 1 ;;
 esac
@@ -198,7 +203,21 @@ PRODUCT_COPY_FILES += \
     vendor/extra/adb_keys:$(TARGET_COPY_OUT_PRODUCT)/etc/security/adb_keys
 PRODUCT_SYSTEM_DEFAULT_PROPERTIES += persist.sys.usb.config=adb
 MK
+  # Mark the build itself, not only the zip's name, so a renamed test zip
+  # can't be published as an OTA (doha_android#95). Soong writes this into
+  # build_number.txt; build/soong/scripts/gen_build_prop.py uses it as
+  # ro.build.version.incremental because it doesn't start with "eng.", and
+  # ota_from_target_files copies that into the zip's metadata as
+  # post-build-incremental. On the phone it shows in
+  # ro.build.version.incremental and ro.build.description (not in Settings,
+  # which shows ro.build.display.id). The epoch keeps it unique per build,
+  # like the default incremental. Switching between test and release
+  # builds makes Kati re-read the makefiles (HAS_BUILD_NUMBER changes), a
+  # few extra minutes; nothing else is rebuilt for it.
+  export BUILD_NUMBER=adbkey.$(date +%s)
 else
+  # A release must not inherit a test build's marker from the environment.
+  unset BUILD_NUMBER
   # Copied files stay in out/ after their rule is gone and would end up in
   # the images, so a normal build after a test build must delete them.
   rm -f "${key_files[@]}"
@@ -241,6 +260,17 @@ zip=$(find "$product" -maxdepth 1 -name '*.zip' ! -name "${ota##*/}" -samefile "
 [ -n "$zip" ] || { echo "No dated zip hard-linked to $ota" >&2; exit 1; }
 built=$(basename "$zip" .zip)
 name=$built${ADB_KEY:+-adbkey}
+# Check the adbkey marker made it into the zip (test builds) or is absent
+# (releases); ota-json.py relies on it (doha_android#95).
+incremental=$(python3 -c 'import sys, zipfile
+for line in zipfile.ZipFile(sys.argv[1]).read("META-INF/com/android/metadata").decode().splitlines():
+    if line.startswith("post-build-incremental="):
+        print(line.partition("=")[2])' "$zip")
+case $incremental,${ADB_KEY:+test} in
+  adbkey.*,test) ;;
+  *,test) echo "$zip: post-build-incremental is '$incremental', expected adbkey.*" >&2; exit 1 ;;
+  adbkey.*,) echo "$zip: post-build-incremental '$incremental' marks a test build, but ADB_KEY isn't set" >&2; exit 1 ;;
+esac
 mkdir -p "$dest"
 cp "$product/$built.zip" "$dest/$name.zip"
 for img in boot dtbo vbmeta; do
