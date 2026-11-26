@@ -108,10 +108,10 @@ index 0000000..d042aa3
 +}
 diff --git a/mbn_fallback/mbn_fallback.c b/mbn_fallback/mbn_fallback.c
 new file mode 100644
-index 0000000..22b9b48
+index 0000000..34a6af8
 --- /dev/null
 +++ b/mbn_fallback/mbn_fallback.c
-@@ -0,0 +1,568 @@
+@@ -0,0 +1,608 @@
 +/*
 + * mbn_fallback: pick a same-country carrier MBN when the doha modem falls
 + * back to EMEA_APAC_SUPER (doha_android#61).
@@ -124,7 +124,7 @@ index 0000000..22b9b48
 + * there's no VoLTE. The MBNs are signed, so they can't be edited.
 + *
 + * This tool asks the modem's PDC service (QMI service 0x24, over QRTR)
-+ * which software MBN is selected for each subscription. When it is the
++ * which software MBN is selected for the first subscription (slot 1). When it is the
 + * super MBN and the SIM's PLMN is in a country we have a tested fallback
 + * for, it selects and activates that MBN instead. Activation restarts the
 + * modem. When a fallback MBN is selected but the SIM is now from another
@@ -396,6 +396,8 @@ index 0000000..22b9b48
 +                return -1;
 +            }
 +            if (le16(v) != 0) {
++                if (le16(v + 2) == QMI_ERR_NOT_PROVISIONED)
++                    return -2; /* e.g. no config selected */
 +                LOGE("PDC 0x%02x: failed, QMI error 0x%04x", msg, le16(v + 2));
 +                return -1;
 +            }
@@ -403,7 +405,9 @@ index 0000000..22b9b48
 +            continue;
 +        }
 +        if (type == QMI_INDICATION) {
-+            if (tlv_find(body, rlen, 0x10, &v) == 4 && le32(v) != token)
++            /* Only our own indication: other PDC clients (QCRIL's MBN
++             * loader) and earlier timed-out calls use other tokens. */
++            if (tlv_find(body, rlen, 0x10, &v) != 4 || le32(v) != token)
 +                continue;
 +            if (tlv_find(body, rlen, 0x01, &v) >= 2 && le16(v) != 0) {
 +                if (le16(v) == QMI_ERR_NOT_PROVISIONED)
@@ -570,9 +574,28 @@ index 0000000..22b9b48
 +    char target[256];
 +    memcpy(target, active, dirlen);
 +    strcpy(target + dirlen, want);
++
++    /*
++     * Switch at most once per SIM and target per boot. Activating restarts
++     * the modem, which fires the init triggers again; if something picked
++     * the old MBN again after that, retrying would restart the modem in a
++     * loop.
++     */
++    char key[PROP_NAME_MAX], tried[PROP_VALUE_MAX], mark[PROP_VALUE_MAX];
++    snprintf(key, sizeof(key), "vendor.mbn_fallback.sub%d", sub);
++    snprintf(mark, sizeof(mark), "%s:%s", plmn, want);
++    __system_property_get(key, tried);
++    if (!strcmp(tried, mark)) {
++        LOGE("SUB%d: SIM %s, MBN %s: already switched to %s this boot, not retrying",
++             sub, plmn, base, want);
++        return 0;
++    }
++
 +    LOGI("SUB%d: SIM %s, MBN %s: selecting %s%s", sub, plmn, base, target, dry_run ? " (dry run)" : "");
 +    if (dry_run)
 +        return 0;
++    if (__system_property_set(key, mark) != 0)
++        LOGE("SUB%d: can't set %s; switching anyway", sub, key);
 +    if (pdc_select_and_activate(c, sub, target) < 0) {
 +        LOGE("SUB%d: selecting %s failed", sub, target);
 +        return -1;
@@ -581,11 +604,20 @@ index 0000000..22b9b48
 +}
 +
 +/* gsm.sim.operator.numeric holds one comma-separated PLMN per slot. */
-+static int process(int dry_run, char *seen, size_t seenlen)
++/* The two properties whose changes start this service, as one string. */
++static void trigger_state(char *buf, size_t len)
++{
++    char numeric[PROP_VALUE_MAX], mcfg[PROP_VALUE_MAX];
++    __system_property_get("gsm.sim.operator.numeric", numeric);
++    __system_property_get("persist.vendor.radio.mcfg_version", mcfg);
++    snprintf(buf, len, "%s|%s", numeric, mcfg);
++}
++
++/* Returns -1 if the modem couldn't be reached or a subscription failed. */
++static int process(int dry_run)
 +{
 +    char numeric[PROP_VALUE_MAX];
 +    __system_property_get("gsm.sim.operator.numeric", numeric);
-+    snprintf(seen, seenlen, "%s", numeric);
 +
 +    struct qmi_conn c;
 +    if (qmi_open(&c) < 0) {
@@ -595,14 +627,21 @@ index 0000000..22b9b48
 +
 +    int ret = 0;
 +    char *p = numeric;
-+    for (int sub = 0; sub < 2; sub++) {
++    /*
++     * SUB0 (slot 1) only. Get Selected Config takes the subscription in TLV
++     * 0x11 (tested: SUB1 answers separately), but no public source gives
++     * the subscription TLV of Activate Config, and an activation meant for
++     * SUB1 could hit SUB0. The second slot of the dual-SIM XT2019-2 is left
++     * to the modem until that's known.
++     */
++    for (int sub = 0; sub < 1; sub++) {
 +        /* strsep keeps empty fields, so slot positions stay right. */
 +        char *tok = p ? strsep(&p, ",") : NULL;
 +        if (!tok)
 +            break;
 +        int r = handle_sub(&c, sub, tok, dry_run);
 +        if (r < 0)
-+            ret = -1;
++            ret = -1; /* go on with the other subscription */
 +        else if (r > 0)
 +            break; /* the modem restarts; the next trigger re-checks */
 +    }
@@ -664,21 +703,22 @@ index 0000000..22b9b48
 +
 +    /*
 +     * Let the modem finish its own MBN selection after a SIM change before
-+     * looking. If the SIM changes again while this runs, init can't start
-+     * the oneshot service again, so check once more at the end.
++     * looking. init can't start a oneshot service that is still running, so
++     * a SIM or MBN change during this run would be lost: look again while
++     * either property keeps changing.
 +     */
-+    char seen[PROP_VALUE_MAX], now[PROP_VALUE_MAX];
-+    for (int round = 0; round < 3; round++) {
++    char seen[2 * PROP_VALUE_MAX + 2], now[2 * PROP_VALUE_MAX + 2];
++    int ret = 0;
++    for (int round = 0; round < 4; round++) {
 +        if (settle > 0)
 +            sleep(settle);
-+        int r = process(dry_run, seen, sizeof(seen));
-+        if (r < 0)
-+            return 1;
-+        __system_property_get("gsm.sim.operator.numeric", now);
++        trigger_state(seen, sizeof(seen));
++        ret = process(dry_run) < 0;
++        trigger_state(now, sizeof(now));
 +        if (!strcmp(seen, now))
 +            break;
 +    }
-+    return 0;
++    return ret;
 +}
 diff --git a/mbn_fallback/mbn_fallback.rc b/mbn_fallback/mbn_fallback.rc
 new file mode 100644
@@ -828,10 +868,10 @@ index 0000000..8cb36d3
 +/vendor/bin/mbn_fallback    u:object_r:mbn_fallback_exec:s0
 diff --git a/sepolicy/vendor/mbn_fallback.te b/sepolicy/vendor/mbn_fallback.te
 new file mode 100644
-index 0000000..f67fe2e
+index 0000000..b0edd97
 --- /dev/null
 +++ b/sepolicy/vendor/mbn_fallback.te
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,17 @@
 +# doha_android#61: mbn_fallback selects the modem's carrier MBN over QMI
 +# PDC (QRTR) when the modem fell back to EMEA_APAC_SUPER.
 +type mbn_fallback, domain;
@@ -842,3 +882,17 @@ index 0000000..f67fe2e
 +
 +# gsm.sim.operator.numeric: the SIM's home PLMN per slot.
 +get_prop(mbn_fallback, telephony_status_prop)
++# persist.vendor.radio.mcfg_version: the active MBN, set by QCRIL.
++get_prop(mbn_fallback, vendor_radio_prop)
++
++# vendor.mbn_fallback.sub*: switches done this boot, so a modem that keeps
++# going back to the old MBN isn't restarted in a loop.
++vendor_internal_prop(vendor_mbn_fallback_prop)
++set_prop(mbn_fallback, vendor_mbn_fallback_prop)
+diff --git a/sepolicy/vendor/property_contexts b/sepolicy/vendor/property_contexts
+new file mode 100644
+index 0000000..e10f472
+--- /dev/null
++++ b/sepolicy/vendor/property_contexts
+@@ -0,0 +1 @@
++vendor.mbn_fallback.    u:object_r:vendor_mbn_fallback_prop:s0
