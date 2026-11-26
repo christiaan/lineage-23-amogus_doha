@@ -11,6 +11,7 @@ The repo has three parts:
 | `default.xml` | A `repo` manifest that pins all 1264 projects to the exact commits the released build used |
 | `patches/` | Our fixes. `patches/<project path>.patch` applies to that project |
 | `build.sh` | Syncs the sources, applies the patches and builds the zip |
+| `repin.sh` | Moves the LineageOS pins in `default.xml` to the branch's current head |
 
 The device tree and vendor blobs come from the community doha port by
 Aldair402 and moto-common. We didn't write those. Our work is the
@@ -119,6 +120,40 @@ With Docker, pass these as `-e NAME=value`.
 
 The build is `userdebug`, unsigned (it uses the AOSP test keys) and has no
 GApps; you can add them yourself (see Installing).
+
+### Moving to a newer LineageOS
+
+`default.xml` pins LineageOS too, so a build doesn't pick up LineageOS's
+monthly security merge by itself. `repin.sh` moves the LineageOS pins to
+the current head of the branch and leaves our own projects alone:
+
+```sh
+./repin.sh [<plain lineage-24.0 checkout>]   # default ~/android/base/lineage-24.0
+```
+
+It needs a plain LineageOS checkout of the same branch, with no local
+manifests and no device projects. It syncs that checkout (with Docker
+when `repo` isn't installed) and takes its `repo manifest -r`. Then it
+finds our changes by comparing `default.xml` with the LineageOS manifest
+at the commit `default.xml` pins now:
+
+- the projects we add keep their entries and pins;
+- the projects we replace at an upstream path keep our entry. Right now
+  that's AOSPA's `external/fastrpc`;
+- the upstream projects we leave out stay out. Right now that's
+  `data-ipa-cfg-mgr-legacy-um`, plus the darwin prebuilts that a
+  `-g default,-darwin` sync leaves out anyway;
+- every other project takes LineageOS's new pin, and projects new in
+  LineageOS are added.
+
+It rewrites `default.xml` and lists the projects that moved. It shows the
+security patch level before and after. It also checks with `git apply
+--check` that the patches for LineageOS projects still apply. Lines
+starting with `CHECK:` need a look by hand, for example when LineageOS
+now has a project at a path where we add one. Review `git diff
+default.xml`, commit it, and do a test build. `SKIP_SYNC=1` uses the
+checkout as it is. With the checkout still at the current pins, that's a
+dry run that leaves `default.xml` unchanged.
 
 ### Publishing an update
 
