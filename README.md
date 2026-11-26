@@ -295,9 +295,11 @@ Known issues:
   connect. Turning Wi-Fi off and on fixes it. Being investigated.
 - **VoLTE depends on the modem's carrier profile.** The modem picks one
   of Motorola's carrier profiles by SIM. For carriers Motorola has no
-  profile for (for example SIMs on KPN's network in the Netherlands) it
-  falls back to a generic profile with IMS off, so calls go over 2G/3G.
-  Stock firmware does the same. Being investigated.
+  profile for, it falls back to a generic profile with IMS off, so calls
+  go over 2G/3G. Stock firmware does the same. For Dutch SIMs without a
+  profile (KPN's network: KPN, simyo, Youfone and others) the ROM
+  switches the modem to the Vodafone NL profile instead, which gives
+  VoLTE (tested with simyo). Other countries aren't covered yet.
 - After a fresh install from stock, the first boot may find only 2G.
   One more reboot fixes it.
 
