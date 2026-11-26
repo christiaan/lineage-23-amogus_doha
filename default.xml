@@ -1274,7 +1274,6 @@
   <project name="trusty/vendor/google/aosp" remote="aosp" revision="93e3ca36bc59e5d357b226e4e5254f8e478213f2" upstream="refs/tags/android-17.0.0_r1" dest-branch="refs/tags/android-17.0.0_r1" groups="pdk,trusty">
     <copyfile src="lk_inc.mk" dest="lk_inc.mk" />
   </project>
-  
   <contactinfo bugurl="go/repo-bug" />
   <project name="android_device_motorola_amogus" path="device/motorola/amogus" remote="moto-common" revision="de72dd4f7dbf63caa93e338bf24d962c18601b2c" upstream="14" dest-branch="14" groups="local::doha" />
   <project name="android_device_motorola_amogus-kernel" path="device/motorola/amogus-kernel" remote="moto-common" revision="1fb2d561ea614612b850df790baa93422dd314aa" upstream="13" dest-branch="13" groups="local::doha" />
